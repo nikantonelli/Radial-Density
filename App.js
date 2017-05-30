@@ -7,7 +7,8 @@ Ext.define('Rally.app.RadialDensity.app', {
     config: {
         defaultSettings: {
             includeStories: false,
-            usePreliminaryEstimate: true
+            usePreliminaryEstimate: false,
+            hideArchived: true
         }
     },
     autoScroll: true,
@@ -103,6 +104,12 @@ Ext.define('Rally.app.RadialDensity.app', {
                 xtype: 'rallycheckboxfield',
                 fieldLabel: 'Use Preliminary Estimate',
                 labelALign: 'middle'
+            },
+            {
+                name: 'hideArchived',
+                xtype: 'rallycheckboxfield',
+                fieldLabel: 'Do not show archived',
+                labelALign: 'middle'
             }
         ];
         return returned;
@@ -173,7 +180,7 @@ Ext.define('Rally.app.RadialDensity.app', {
                             _.each(data, function(v) {
                                 gApp._typeSizeStore[v.get('Name')] = v.get('Value');
                                 if (v.get('Value') > gApp._typeSizeMax) gApp._typeSizeMax = v.get('Value');
-                            })
+                            });
                         }
                     }
                 }
@@ -339,14 +346,14 @@ Ext.define('Rally.app.RadialDensity.app', {
             colour = d3.scaleLinear()
                 .domain([0.00001,gApp._typeSizeMax])
                 .range(["blue","yellow"])
-                .interpolate(d3.interpolateCubehelixLong.gamma(0.6))
+                .interpolate(d3.interpolateRgb)
             ;
         }
         else {
             colour = d3.scaleLinear()
-                .domain([0.00001,3])
-                .range(["purple","yellow"])
-                .interpolate(d3.interpolateCubehelixLong.gamma(0.6))
+                .domain([0.00001,4])
+                .range(["blue","yellow"])
+                .interpolate(d3.interpolateRgb)
             ;
         }
 
