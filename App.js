@@ -8,7 +8,9 @@ Ext.define('Rally.app.RadialDensity.app', {
         defaultSettings: {
             includeStories: false,
             usePreliminaryEstimate: false,
-            hideArchived: true
+            hideArchived: false,
+            sizeStoriesByPlanEstimate: false,
+            useScheduleState: true
         }
     },
     autoScroll: true,
@@ -46,6 +48,7 @@ Ext.define('Rally.app.RadialDensity.app', {
         'PercentDoneByStoryPlanEstimate',
         'State',
         'ScheduleState',
+        'PlanEstimate',
         'PreliminaryEstimate',
         'Description',
         'Notes',
@@ -110,7 +113,20 @@ Ext.define('Rally.app.RadialDensity.app', {
                 xtype: 'rallycheckboxfield',
                 fieldLabel: 'Do not show archived',
                 labelALign: 'middle'
+            },
+            {
+                name: 'sizeStoriesByPlanEstimate',
+                xtype: 'rallycheckboxfield',
+                fieldLabel: 'Size Stories by Plan Estimate',
+                labelALign: 'middle'
+            },
+            {
+                name: 'useScheduleState',
+                xtype: 'rallycheckboxfield',
+                fieldLabel: 'Stories coloured by Schedule State',
+                labelALign: 'middle'
             }
+            
         ];
         return returned;
     },
@@ -164,6 +180,7 @@ Ext.define('Rally.app.RadialDensity.app', {
 
     _typeSizeStore: null,
     _typeSizeMax: 0,
+    _storyStates: [],
 
     //Entry point after creation of render box
     _onElementValid: function(rs) {
@@ -185,6 +202,14 @@ Ext.define('Rally.app.RadialDensity.app', {
                     }
                 }
             });
+        Rally.data.ModelFactory.getModel({
+            type: 'UserStory',
+            success: function(model) {
+                _.each(model.getField('ScheduleState').attributeDefinition.AllowedValues, function(value,idx) {
+                    gApp._storyStates.push( { name: value.StringValue, value : idx});
+                });
+            }
+        });
         //Add any useful selectors into this container ( which is inserted before the rootSurface )
         //Choose a point when all are 'ready' to jump off into the rest of the app
         var hdrBox = this.insert (0,{
@@ -311,10 +336,10 @@ Ext.define('Rally.app.RadialDensity.app', {
                     collectionConfig.fetch.push(gApp._getModelFromOrd(0).split("/").pop()); //Add the lowest level field on User Stories
                     parent.getCollection( 'UserStories').load( collectionConfig );
                 } 
-                //If we are userstories, then we need to fetch tasks
-                else if (parent.hasField('Tasks') && (gApp.getSetting('includeStories'))){
-                    parent.getCollection( 'Tasks').load( collectionConfig );                    
-                }
+                // //If we are userstories, then we need to fetch tasks
+                // else if (parent.hasField('Tasks') && (gApp.getSetting('includeStories'))){
+                //     parent.getCollection( 'Tasks').load( collectionConfig );                    
+                // }
             }
         });
     },
@@ -343,18 +368,30 @@ Ext.define('Rally.app.RadialDensity.app', {
     _refreshTree: function(viewBoxSize){
         var width = viewBoxSize[0], height = viewBoxSize[1], radius = Math.min(width, height)/2;
         if (gApp.getSetting('usePreliminaryEstimate')) {
-            colour = d3.scaleLinear()
-                .domain([0.00001,gApp._typeSizeMax])
+            piColour = d3.scaleLinear()
+                .domain([0, gApp._typeSizeMax])
                 .range(["blue","yellow"])
                 .interpolate(d3.interpolateRgb)
             ;
         }
-        else {
-            colour = d3.scaleLinear()
-                .domain([0.00001,4])
+        else {  //Will use Leaf Story point roll-up
+            piColour = d3.scaleLinear()
+                .domain([0, 4]) //We calculate a log10 number elsewhere
                 .range(["blue","yellow"])
                 .interpolate(d3.interpolateRgb)
             ;
+        }
+
+        if (gApp.getSetting('sizeStoriesByPlanEstimate')) {
+            usColour = d3.scaleLinear()
+                .domain([0,25])
+                .range(["blue","yellow"])
+                .interpolate(d3.interpolateRgb);
+        } else {
+            usColour = d3.scaleSequential()
+                .domain([0,(_.max(gApp._storyStates, 'value')).value])
+                .interpolator(d3.interpolateRainbow);
+
         }
 
         var partition = d3.partition()
@@ -368,27 +405,61 @@ Ext.define('Rally.app.RadialDensity.app', {
 
         //Might want to change this...
         gApp._nodeTree.sum( function(d) {
-            return 1;
+            if (d.record.isPortfolioItem()){
+                if ( gApp.getSetting('usePreliminaryEstimate')){
+                    retval = d.record.get('PreliminaryEstimate');
+                } else {
+                    retval = d.record.get('LeafStoryCount'); 
+                }
+            }else {
+                    //We are a User Story here
+                    if ( gApp.getSetting('sizeStoriesByPlanEstimate')){
+                        return d.record.get('PlanEstimate');
+                    }else {
+                        return 1 + d.record.get('DirectChildrenCount'); 
+                    }
+                }
             // var retval = d.record.isPortfolioItem() ? d.record.get('LeafStoryPlanEstimateTotal') : d.record.get('PlanEstimate');
-            // return retval ? retval: 1;
+             return retval ? retval: 1;
         });
 
         var nodetree = partition(gApp._nodeTree);
         var tree = d3.select('#tree');
         var path = tree.selectAll("path")
-            .data(nodetree.descendants().slice(1))
+            .data(nodetree.descendants())
             .enter().append("path")
-            .attr("display", function(d) { return d.depth ? null : "none"; }) // hide inner ring
+//            .attr("display", function(d) { return d.depth ? null : "none"; }) // hide inner ring
             .attr("d", arc)
-            .style("stroke", "#fff")
-            .style("fill", function(d) { 
-                if ( gApp.getSetting('usePreliminaryEstimate')){
-                    var est = d.data.record.get('PreliminaryEstimate');
-                    return colour( est ? gApp._typeSizeStore[est._refObjectName] : 0);
-                }else {
-                   return colour( Math.log10(d.data.record.isPortfolioItem() ? d.data.record.get('LeafStoryCount') : d.data.record.get('DirectChildrenCount'))); 
+//            .style("stroke", "#fff")
+            .attr("class", function (d) {   //Work out the individual dot colour
+                var lClass = ""; // Might want to use outline to indicate something later
+                if (d.data.record.data.ObjectID){
+                    if (d.data.record.isTask()) lClass = d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"";
+                    else if (d.data.record.isUserStory()) lClass = d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"";
+                    else lClass = (d.data.record.get('Ready')?"readyOutline":"");      //Not been set - which is an error in itself
                 }
-//            .style("fill-rule", "evenodd")
+                return lClass === "" ? "dotOutline" : lClass;
+
+            })
+            .style("fill", function(d) { 
+                if ( d.data.record.isPortfolioItem())
+                {
+                    if ( gApp.getSetting('usePreliminaryEstimate')){
+                        var est = d.data.record.get('PreliminaryEstimate');
+                        return piColour( est ? gApp._typeSizeStore[est._refObjectName] : 0);
+                    } else {
+                        return piColour( Math.log10(d.data.record.get('LeafStoryCount'))); 
+                    }
+                } else {
+                    //We are a User Story here
+                    if ( gApp.getSetting('useScheduleState')){
+                        var state = d.data.record.get('ScheduleState');
+                        return usColour( (_.find (gApp._storyStates, { 'name' : state })).value);
+                    }else {
+                        return usColour( 1 ); 
+                    }
+                }
+
             })
             .on("mouseover", function(node, index, array) { gApp._nodeMouseOver(node,index,array);})
             .on("mouseout", function(node, index, array) { gApp._nodeMouseOut(node,index,array);})
