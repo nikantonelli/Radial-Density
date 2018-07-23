@@ -65,15 +65,22 @@
 
 .dotOutline {
   stroke: #fff;
-  stroke-width: 2px;
+  stroke-width: 3px;
 }
 .readyOutline {
   stroke: #0f0;
-  stroke-width: 2px;  
+  stroke-width: 1px;  
 }
 .blockedOutline {
   stroke: #f00;
-  stroke-width: 2px;  
+  stroke-width: 1px;  
+}
+
+.gotPredecessors {
+
+}
+.gotSuccessors {
+
 }
 
 .q0-3{fill:rgb(252,141,89)}  .q1-3{fill:rgb(255,255,191)}  .q2-3{fill:rgb(145,191,219)}
@@ -83,3 +90,11 @@
  .q0-7{fill:rgb(215,48,39)}  .q1-7{fill:rgb(252,141,89)}  .q2-7{fill:rgb(254,224,144)}  .q3-7{fill:rgb(255,255,191)}  .q4-7{fill:rgb(224,243,248)}  .q5-7{fill:rgb(145,191,219)}  .q6-7{fill:rgb(69,117,180)}
  .q0-8{fill:rgb(215,48,39)}  .q1-8{fill:rgb(244,109,67)}  .q2-8{fill:rgb(253,174,97)}  .q3-8{fill:rgb(254,224,144)}  .q4-8{fill:rgb(224,243,248)}  .q5-8{fill:rgb(171,217,233)}  .q6-8{fill:rgb(116,173,209)}  .q7-8{fill:rgb(69,117,180)}
  .q0-9{fill:rgb(215,48,39)}  .q1-9{fill:rgb(244,109,67)}  .q2-9{fill:rgb(253,174,97)}  .q3-9{fill:rgb(254,224,144)}  .q4-9{fill:rgb(255,255,191)}  .q5-9{fill:rgb(224,243,248)}  .q6-9{fill:rgb(171,217,233)}  .q7-9{fill:rgb(116,173,209)}  .q8-9{fill:rgb(69,117,180)}
+
+ .RdPu0-3{fill:rgb(253,224,221)} .RdPu1-3{fill:rgb(250,159,181)} .RdPu2-3{fill:rgb(197,27,138)}
+ .RdPu0-4{fill:rgb(254,235,226)} .RdPu1-4{fill:rgb(251,180,185)} .RdPu2-4{fill:rgb(247,104,161)} .RdPu3-4{fill:rgb(174,1,126)}
+ .RdPu0-5{fill:rgb(254,235,226)} .RdPu1-5{fill:rgb(251,180,185)} .RdPu2-5{fill:rgb(247,104,161)} .RdPu3-5{fill:rgb(197,27,138)} .RdPu4-5{fill:rgb(122,1,119)}
+ .RdPu0-6{fill:rgb(254,235,226)} .RdPu1-6{fill:rgb(252,197,192)} .RdPu2-6{fill:rgb(250,159,181)} .RdPu3-6{fill:rgb(247,104,161)} .RdPu4-6{fill:rgb(197,27,138)} .RdPu5-6{fill:rgb(122,1,119)}
+ .RdPu0-7{fill:rgb(254,235,226)} .RdPu1-7{fill:rgb(252,197,192)} .RdPu2-7{fill:rgb(250,159,181)} .RdPu3-7{fill:rgb(247,104,161)} .RdPu4-7{fill:rgb(221,52,151)} .RdPu5-7{fill:rgb(174,1,126)} .RdPu6-7{fill:rgb(122,1,119)}
+ .RdPu0-8{fill:rgb(255,247,243)} .RdPu1-8{fill:rgb(253,224,221)} .RdPu2-8{fill:rgb(252,197,192)} .RdPu3-8{fill:rgb(250,159,181)} .RdPu4-8{fill:rgb(247,104,161)} .RdPu5-8{fill:rgb(221,52,151)} .RdPu6-8{fill:rgb(174,1,126)} .RdPu7-8{fill:rgb(122,1,119)}
+ .RdPu0-9{fill:rgb(255,247,243)} .RdPu1-9{fill:rgb(253,224,221)} .RdPu2-9{fill:rgb(252,197,192)} .RdPu3-9{fill:rgb(250,159,181)} .RdPu4-9{fill:rgb(247,104,161)} .RdPu5-9{fill:rgb(221,52,151)} .RdPu6-9{fill:rgb(174,1,126)} .RdPu7-9{fill:rgb(122,1,119)} .RdPu8-9{fill:rgb(73,0,106)}

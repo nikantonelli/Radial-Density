@@ -15,13 +15,16 @@ Ext.define('Rally.app.RadialDensity.app', {
     componentCls: 'app',
     config: {
         defaultSettings: {
-            includeStories: false,
-            usePreliminaryEstimate: false,
+            includeStories: true,
+            usePreliminaryEstimate: true,
             hideArchived: false,
             sizeStoriesByPlanEstimate: false,
-            useScheduleState: true
+//            useScheduleState: false,
+//            useState: true,
+            colourScheme: 'RdPu'
         }
     },
+
     autoScroll: true,
     itemId: 'rallyApp',
     NODE_CIRCLE_SIZE: 8,
@@ -29,10 +32,10 @@ Ext.define('Rally.app.RadialDensity.app', {
     CARD_BORDER_WIDTH: 5,
     MIN_ROW_WIDTH: 160,
     MIN_CARD_HEIGHT:    150,
-    MIN_ROW_HEIGHT: 160 ,         //Bit more than the card to leave a gap
+    MIN_ROW_HEIGHT: 30 ,         //Bit more than the text
     LOAD_STORE_MAX_RECORDS: 100, //Can blow up the Rally.data.wsapi.filter.Or
     WARN_STORE_MAX_RECORDS: 300, //Can be slow if you fetch too many
-    LEFT_MARGIN_SIZE: 0,               //Leave space for "World view" text
+    LEFT_MARGIN_SIZE: 20,               //Leave space for "World view" text or colour box
     MIN_COLUMN_WIDTH: 200,
     TITLE_NAME_LENGTH: 80,
     STORE_FETCH_FIELD_LIST:
@@ -78,11 +81,13 @@ Ext.define('Rally.app.RadialDensity.app', {
         'Name', //This one
 //        'Owner',
         'PreliminaryEstimate',
+        'PlanEstimate',
         // 'Parent',
         // 'Project',
         'PercentDoneByStoryCount',
         'PercentDoneByStoryPlanEstimate',
-        // 'State',
+        'ScheduleState',
+        'State',
         // 'c_ProjectIDOBN',
         // 'c_QRWP',
         // 'c_RAGStatus'
@@ -103,20 +108,12 @@ Ext.define('Rally.app.RadialDensity.app', {
         }
     ],
 
+    onSettingsUpdate: function() {
+        gApp._redrawTree();
+    },
+
     getSettingsFields: function() {
         var returned = [
-            {
-                name: 'includeStories',
-                xtype: 'rallycheckboxfield',
-                fieldLabel: 'Include User Stories',
-                labelALign: 'middle'
-            },
-            {
-                name: 'usePreliminaryEstimate',
-                xtype: 'rallycheckboxfield',
-                fieldLabel: 'Use Preliminary Estimate',
-                labelALign: 'middle'
-            },
             {
                 name: 'hideArchived',
                 xtype: 'rallycheckboxfield',
@@ -124,15 +121,34 @@ Ext.define('Rally.app.RadialDensity.app', {
                 labelALign: 'middle'
             },
             {
+                name: 'includeStories',
+                xtype: 'rallycheckboxfield',
+                fieldLabel: 'Include User Stories',
+                labelALign: 'middle'
+            },
+            
+            {
                 name: 'sizeStoriesByPlanEstimate',
                 xtype: 'rallycheckboxfield',
                 fieldLabel: 'Size Stories by Plan Estimate',
                 labelALign: 'middle'
             },
+            // {
+            //     name: 'useScheduleState',
+            //     xtype: 'rallycheckboxfield',
+            //     fieldLabel: 'Stories coloured by Schedule State',
+            //     labelALign: 'middle'
+            // },
+            // {
+            //     name: 'useState',
+            //     xtype: 'rallycheckboxfield',
+            //     fieldLabel: 'PIs coloured by State',
+            //     labelALign: 'middle'
+            // },
             {
-                name: 'useScheduleState',
+                name: 'usePreliminaryEstimate',
                 xtype: 'rallycheckboxfield',
-                fieldLabel: 'Stories coloured by Schedule State',
+                fieldLabel: 'Use Preliminary Estimate Size',
                 labelALign: 'middle'
             }
             
@@ -242,6 +258,7 @@ Ext.define('Rally.app.RadialDensity.app', {
                     },
                     listeners: {
                         select: function() { gApp._kickOff();},    //Jump off here to add portfolio size selector
+                        ready: function() { gApp._addColourHelper(); }
                     }
                 },
             ]
@@ -249,6 +266,7 @@ Ext.define('Rally.app.RadialDensity.app', {
     },
 
     _nodes: [],
+    numStates: [],
 
     _kickOff: function() {
         var ptype = gApp.down('#piType');
@@ -285,6 +303,30 @@ Ext.define('Rally.app.RadialDensity.app', {
                 }
             }
         });
+
+        var buttonTxt = "Colour Codes";
+        if (!gApp.down('#colourButton')){
+            hdrBox.add({
+                xtype: 'rallybutton',
+                itemId: 'colourButton',
+                margin: '10 0 5 20',
+                ticked: false,
+                text: buttonTxt,
+                handler: function() {
+                    if (this.ticked === false) {
+                        this.setText('Return');
+                        this.ticked = true;
+                        d3.select("#colourLegend").attr("visibility","visible");
+                        d3.select("#tree").attr("visibility", "hidden");
+                    } else {
+                        this.setText(buttonTxt);
+                        this.ticked = false;
+                        d3.select("#colourLegend").attr("visibility","hidden");
+                        d3.select("#tree").attr("visibility", "visible");
+                    }
+                }
+            });
+        }
     },
 
     _getArtifacts: function(data) {
@@ -376,33 +418,6 @@ Ext.define('Rally.app.RadialDensity.app', {
 
     _refreshTree: function(viewBoxSize){
         var width = viewBoxSize[0], height = viewBoxSize[1], radius = Math.min(width, height)/2;
-        if (gApp.getSetting('usePreliminaryEstimate')) {
-            piColour = d3.scaleLinear()
-                .domain([0, gApp._typeSizeMax])
-                .range(["blue","yellow"])
-                .interpolate(d3.interpolateRgb)
-            ;
-        }
-        else {  //Will use Leaf Story point roll-up
-            piColour = d3.scaleLinear()
-                .domain([0, 4]) //We calculate a log10 number elsewhere
-                .range(["blue","yellow"])
-                .interpolate(d3.interpolateRgb)
-            ;
-        }
-
-        if (gApp.getSetting('sizeStoriesByPlanEstimate')) {
-            usColour = d3.scaleLinear()
-                .domain([0,25])
-                .range(["blue","yellow"])
-                .interpolate(d3.interpolateRgb);
-        } else {
-            usColour = d3.scaleSequential()
-                .domain([0,(_.max(gApp._storyStates, 'value')).value])
-                .interpolator(d3.interpolateRainbow);
-
-        }
-
         var partition = d3.partition()
             .size([2 * Math.PI, radius * radius]);
 
@@ -441,33 +456,27 @@ Ext.define('Rally.app.RadialDensity.app', {
             .attr("d", arc)
 //            .style("stroke", "#fff")
             .attr("class", function (d) {   //Work out the individual dot colour
-                var lClass = ""; // Might want to use outline to indicate something later
+                var lClass = ['dotOutline']; // Might want to use outline to indicate something later
                 if (d.data.record.data.ObjectID){
-                    if (d.data.record.isTask()) lClass = d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"";
-                    else if (d.data.record.isUserStory()) lClass = d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"";
-                    else lClass = (d.data.record.get('Ready')?"readyOutline":"");      //Not been set - which is an error in itself
-                }
-                return lClass === "" ? "dotOutline" : lClass;
-
-            })
-            .style("fill", function(d) { 
-                if ( d.data.record.isPortfolioItem())
-                {
-                    if ( gApp.getSetting('usePreliminaryEstimate')){
-                        var est = d.data.record.get('PreliminaryEstimate');
-                        return piColour( est ? gApp._typeSizeStore[est._refObjectName] : 0);
-                    } else {
-                        return piColour( Math.log10(d.data.record.get('LeafStoryCount'))); 
+                    if (d.data.record.isTask()) {
+                        lClass.push(d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"");
                     }
-                } else {
-                    //We are a User Story here
-                    if ( gApp.getSetting('useScheduleState')){
-                        var state = d.data.record.get('ScheduleState');
-                        return usColour( (_.find (gApp._storyStates, { 'name' : state })).value);
-                    }else {
-                        return usColour( 1 ); 
+                    else if (d.data.record.isUserStory()) { 
+                        lClass.push(gApp.settings.colourScheme  + (_.find (gApp._storyStates, { 'name' : d.data.record.get('ScheduleState') })).value + '-' + gApp._storyStates.length);
+                        lClass.push(d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"");
+                    }
+                    else if (d.data.record.isPortfolioItem()) {
+                        if (d.data.record.get('Predecessors').Count > 0) {
+                            lClass.push("gotPredecessors");
+                        }
+                        else if (d.data.record.get('Successors').Count > 0) {
+                            lClass.push("gotSuccessors");
+                        }
+                        if (!d.data.record.get('State')) lClass.push("error--node");      //Not been set - which is an error in itself
+                        else lClass.push( gApp.settings.colourScheme + ((d.data.record.get('State').OrderIndex-1) + '-' + gApp.numStates[gApp._getOrdFromModel(d.data.record.get('_type'))]));
                     }
                 }
+                return lClass.join(' ');
 
             })
             .on("mouseover", function(node, index, array) { gApp._nodeMouseOver(node,index,array);})
@@ -476,9 +485,9 @@ Ext.define('Rally.app.RadialDensity.app', {
             .each(gApp.stash);
 
         d3.selectAll("input").on("change", function change() {
-            var value = this.value === "count"
-                ? function() { return 1; }
-                : function(d) { return d.value; };
+            var value = this.value === "count" ?
+                 function() { return 1; } :
+                 function(d) { return d.value; };
 
             path
                 .data(partition.value(value).nodes)
@@ -492,6 +501,7 @@ Ext.define('Rally.app.RadialDensity.app', {
     },
 
     stash: function (d) {
+        //debugger;   //TODO: Get info and apply dependency links?
         d.x0 = d.x;
         d.dx0 = d.dx;
     },
@@ -505,118 +515,6 @@ Ext.define('Rally.app.RadialDensity.app', {
             return arc(b);
         };
     },
-
-    // _findParentTreeNode: function(nodetree, item) {
-    //     return _.find(nodetree.descendants(), function(d) { 
-    //         return d.id === item.data._ref;
-    //     });
-    // },
-    // // Now that we have the tree plotted to the end, we can find all the leaves and add all the children in a vertical line underneath
-    // _addChildren: function(parent, items) {
-
-    //     _.each(items, function(item) {
-    //         var leaf = gApp._createTree(gApp._createNodes([item]));    //Try to create a node from the 'single' datum       
-    //         var parentNode = gApp._findParentNode(gApp._nodes,leaf.data); //Try and find the node in the current tree
-    //         if (parentNode) {
-    //             parentNode.children? parentNode.children.push(leaf): parentNode.children = [leaf];
-    //         }
-    //     });
-    // },
-
-    // _plotChildren: function (parent) {
-    //     var addedChildren = 0;
-    //     _.each(parent.data.children, function(node, idx){
-    //         node.parent = parent;
-    //         node.x = parent.x;
-    //         node.y = parent.y + ((idx+1) * gApp.MIN_ROW_HEIGHT);
-    //         node.depth = parent.depth + 1;
-    //         node.height = 0;
-    //         addedChildren +=1 ;
-    //     });
-    //     return addedChildren;
-    // },
-
-    // _drawNodes: function(node) {
-    //     gApp._drawNode(node);
-
-    //     node.each( function (d, index, array) {
-    //         if ( d.data.children) {
-    //             var childnode = g.selectAll(".node")
-    //                 .data(d.data.children)
-    //                 .enter().append("g")
-    //                 .attr("id", function(d) { return 'group' + d.data.record.data.FormattedID;})
-    //                 .attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; });
-    //             gApp._drawNode(childnode);
-    //         }
-    //     });
-    // },
-
-    // _drawNode: function(node) {
-    //     node.append("rect")
-    //         .attr("dy", -3)
-    //         .attr("rx", gApp.NODE_CIRCLE_SIZE)
-    //         .attr("ry", gApp.NODE_CIRCLE_SIZE)
-    //         .attr("width", gApp.MIN_CARD_WIDTH)
-    //         .attr("height", gApp.MIN_CARD_HEIGHT)
-    //         .attr("class", function (d) {   //Work out the individual dot colour
-    //             var lClass = "dotOutline"; // Might want to use outline to indicate something later
-    //             if (d.data.record.data.ObjectID){
-    //                 if (d.data.record.isTask()) return d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"";
-    //                 else if (d.data.record.isUserStory()) return d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"";
-    //                 else return (d.data.record.get('Ready')?"readyOutline":"");      //Not been set - which is an error in itself
-    //             } else {
-    //                 return d.data.error ? "error--node": "no--errors--done";
-    //             }
-    //         })
-    //         .on("click", function(node, index, array) { gApp._nodeClick(node,index,array);})
-    //         .on("mouseover", function(node, index, array) { gApp._nodeMouseOver(node,index,array);})
-    //         .on("mouseout", function(node, index, array) { gApp._nodeMouseOut(node,index,array);})
-    //         .attr("fill", function(d) {
-    //             //Get existing colour to use if we don't set anything
-    //             //Check if we are a userstory and set color to stored DisplayColor, if unset, don't modify the class setting
-    //             if (d.data.record.isUserStory()) {
-    //                 return d.data.record.get('DisplayColor')?d.data.record.get('DisplayColor'): 'lavenderblush';
-    //             } else if (d.data.record.isTask()) {
-    //                 return d.data.record.get('DisplayColor')?d.data.record.get('DisplayColor'): 'lemonchiffon';
-    //             }
-    //             else return d.data.record.get('DisplayColor')?d.data.record.get('DisplayColor'): 'aliceblue';
-    //         });
-
-    //     //We need to work out how much text we can see
-    //     var ssLength = 25;
-    //     var ssHeight = 14;  //Match CSS height of default text.
-    //     node.each( function(d, index, array) {
-    //         var g = d3.select(array[index]);
-    //         g.append("text")
-    //             .text( function(d) { 
-    //                 var retval= d.data.record && d.data.record.get('FormattedID');
-    //                 return retval;
-    //                 })
-    //             .attr("class", "info--box")
-    //             .attr("dx", gApp.MIN_CARD_WIDTH/2)
-    //             .attr("dy", 18)    //Matches CSS file
-    //             .attr("text-anchor","middle");
-    //         var title = d.data.record && d.data.record.get('Name').substring(0,gApp.TITLE_NAME_LENGTH);
-    //         for ( var i = 0, l = 2; i < title.length;  l +=1){
-    //             var t = gApp._splitClosestSpace(title.substr(i), ssLength);
-    //             g.append("text").text(t)
-    //                 .attr("dx", gApp.NODE_CIRCLE_SIZE)
-    //                 .attr("dy",gApp.NODE_CIRCLE_SIZE+(l * ssHeight));
-    //             i += t.length;
-    //         }                
-    //     })
-    //     //Fix issue of small area to hover over due to z-layer
-    //     .on("mouseover", function(node, index, array) { gApp._nodeMouseOver(node,index,array);})
-    //     .on("mouseout", function(node, index, array) { gApp._nodeMouseOut(node,index,array);});
-    // },
-
-    // _splitClosestSpace: function(text, length) {
-    //     if (text.length < length) return text;
-    //     var lastSpace = _.lastIndexOf(text.substr(0, length)," ");
-    //     if (lastSpace>0) return text.substring(0,lastSpace);
-    //     else return text.substr(0, length);
-    
-    // },
     
     _nodeMouseOut: function(node, index,array){
         if (node.card) node.card.hide();
@@ -979,7 +877,7 @@ Ext.define('Rally.app.RadialDensity.app', {
         _.each(gApp._typeStore.data.items, function(type) {
             //Only push types below that selected
             if (type.data.Ordinal <= (highestOrdinal ? highestOrdinal: 0) )
-                piModels.push({ 'type': type.data.TypePath.toLowerCase(), 'Name': type.data.Name, 'ref': type.data._ref});
+                piModels.push({ 'type': type.data.TypePath.toLowerCase(), 'Name': type.data.Name, 'ref': type.data._ref, 'Ordinal': type.data.Ordinal});
         });
         return piModels;
     },
@@ -1043,6 +941,131 @@ Ext.define('Rally.app.RadialDensity.app', {
                         return (pParent && pParent.record && pParent.record.data._ref); })
                     (nodes);
         return nodetree;
+    },
+
+    _addColourHelper: function() {
+        var hdrBox = gApp.down('#headerBox');
+        var numTypes = gApp._highestOrdinal() + 2;  //Leave spac efor user stories if needed
+        var modelList = gApp._getTypeList(numTypes);  //Doesn't matter if we are one over here.
+
+        //Get the SVG surface and add a new group
+        var svg = d3.select('svg');
+        //Set a size big enough to hold the colour palette (which may get bigger later)
+        gApp.colourBoxSize = [gApp.MIN_COLUMN_WIDTH*numTypes, 20 * gApp.MIN_ROW_HEIGHT];   //Guess at a maximum of 20 states per type
+
+        //Make surface the size available in the viewport (minus the selectors and margins)
+        var rs = this.down('#rootSurface');
+        rs.getEl().setWidth(gApp.colourBoxSize[0]);
+        rs.getEl().setHeight(gApp.colourBoxSize[1]);
+        //Set the svg area to the surface
+        this._setSVGSize(rs);
+        // Set the view dimensions in svg to match
+        svg.attr('class', 'rootSurface');
+        svg.attr('preserveAspectRatio', 'none');
+        svg.attr('viewBox', '0 0 ' + gApp.colourBoxSize[0] + ' ' + (gApp.colourBoxSize[1]+ gApp.NODE_CIRCLE_SIZE));
+        var colours = svg.append("g")    //New group for colours
+            .attr("id", "colourLegend")
+            .attr("transform","translate(" + gApp.LEFT_MARGIN_SIZE + ",10)");
+        //Add some legend specific sprites here
+
+        if ( gApp.getSetting('includeStories')) {
+            var usc = colours.append("g")
+                .attr("id", "storyColourLegend")
+                .attr("transform", "translate(0,10)");
+
+            usc.append("text")
+                .attr("dx", -gApp.NODE_CIRCLE_SIZE )
+                .attr("dy", -(gApp.NODE_CIRCLE_SIZE+2))
+                .attr("x",  0)
+                .attr("y", 0)
+                .style("text-anchor",  'start')
+                .text("User Story");
+
+            _.each(gApp._storyStates, function(state,idx){
+                usc.append("circle")
+                    .attr("cx", 0)
+                    .attr("cy", (idx+1) * gApp.MIN_ROW_HEIGHT)    //Leave space for text of name
+                    .attr("r", gApp.NODE_CIRCLE_SIZE)
+                    .attr("class", gApp.settings.colourScheme  + state.value + '-' + gApp._storyStates.length);
+                usc.append("text")
+                    .attr("dx", gApp.NODE_CIRCLE_SIZE+2)
+                    .attr("dy", gApp.NODE_CIRCLE_SIZE/2)
+                    .attr("x",0)
+                    .attr("y",(idx+1) * gApp.MIN_ROW_HEIGHT)
+                    .attr("text-anchor", 'start')
+                    .text(state.name);
+            });
+        }
+
+        _.each(modelList, function(modeltype) {
+            gApp._addColourBox(modeltype);
+        });
+
+    },
+
+    _addColourBox: function(modeltype) {
+        
+        var colours = d3.select('#colourLegend');
+        var indent = 0;
+
+        if ( gApp.getSetting('includeStories')) {
+            indent = 1;
+        }
+        var colourBox = colours.append("g")
+            .attr("id", "colourLegend" + modeltype.Ordinal)
+            .attr("transform","translate(" + (gApp.MIN_COLUMN_WIDTH*(modeltype.Ordinal+indent)) + ",10)");
+
+            var lCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            colourBox.append("text")
+                .attr("dx", -gApp.NODE_CIRCLE_SIZE )
+                .attr("dy", -(gApp.NODE_CIRCLE_SIZE+2))
+                .attr("x",  0)
+                .attr("y", 0)
+                .style("text-anchor",  'start')
+                .text(modeltype.Name);
+
+            //Now fetch all the values for the State field
+            //And then add the colours
+            var typeStore = Ext.create('Rally.data.wsapi.Store',
+                {
+                    model: 'State',
+                    filters: [{
+                        property: 'TypeDef',
+                        value: modeltype.ref
+                    },
+                    {
+                        property: 'Enabled',
+                        value: true
+                    }],
+                    context: gApp.getContext().getDataContext(),
+                    fetch: true
+                }
+            );
+            typeStore.load().then({ 
+                success: function(records){
+                    gApp.numStates[modeltype.Ordinal] = records.length;
+                    _.each(records, function(state){
+                        var idx = state.get('OrderIndex');
+                        colourBox.append("circle")
+                            .attr("cx", 0)
+                            .attr("cy", idx * gApp.MIN_ROW_HEIGHT)    //Leave space for text of name
+                            .attr("r", gApp.NODE_CIRCLE_SIZE)
+                            .attr("class", gApp.settings.colourScheme  + (state.get('OrderIndex')-1) + '-' + records.length);
+                        colourBox.append("text")
+                            .attr("dx", gApp.NODE_CIRCLE_SIZE+2)
+                            .attr("dy", gApp.NODE_CIRCLE_SIZE/2)
+                            .attr("x",0)
+                            .attr("y",idx * gApp.MIN_ROW_HEIGHT)
+                            .attr("text-anchor", 'start')
+                            .text(state.get('Name'));
+                    });
+                },
+                failure: function(error) {
+                    console.log ('Oh no!');
+                }
+            });
+        
+        colours.attr("visibility","hidden");    //Render, but mask it. Use "visible" to show again
     },
 
     initComponent: function() {
@@ -18484,7 +18507,8 @@ Object.defineProperty(exports, '__esModule', { value: true });
 
             Rally.launchApp('Rally.app.RadialDensity.app', {
                 name:"Density Map",
-	            parentRepos:""
+                parentRepos:"",
+                version:"1.0.0"
             });
 
         });
@@ -18556,15 +18580,15 @@ Object.defineProperty(exports, '__esModule', { value: true });
 }
 .dotOutline {
   stroke: #fff;
-  stroke-width: 2px;
+  stroke-width: 3px;
 }
 .readyOutline {
   stroke: #0f0;
-  stroke-width: 2px;
+  stroke-width: 1px;
 }
 .blockedOutline {
   stroke: #f00;
-  stroke-width: 2px;
+  stroke-width: 1px;
 }
 .q0-3 {
   fill: #fc8d59;
@@ -18691,6 +18715,132 @@ Object.defineProperty(exports, '__esModule', { value: true });
 }
 .q8-9 {
   fill: #4575b4;
+}
+.RdPu0-3 {
+  fill: #fde0dd;
+}
+.RdPu1-3 {
+  fill: #fa9fb5;
+}
+.RdPu2-3 {
+  fill: #c51b8a;
+}
+.RdPu0-4 {
+  fill: #feebe2;
+}
+.RdPu1-4 {
+  fill: #fbb4b9;
+}
+.RdPu2-4 {
+  fill: #f768a1;
+}
+.RdPu3-4 {
+  fill: #ae017e;
+}
+.RdPu0-5 {
+  fill: #feebe2;
+}
+.RdPu1-5 {
+  fill: #fbb4b9;
+}
+.RdPu2-5 {
+  fill: #f768a1;
+}
+.RdPu3-5 {
+  fill: #c51b8a;
+}
+.RdPu4-5 {
+  fill: #7a0177;
+}
+.RdPu0-6 {
+  fill: #feebe2;
+}
+.RdPu1-6 {
+  fill: #fcc5c0;
+}
+.RdPu2-6 {
+  fill: #fa9fb5;
+}
+.RdPu3-6 {
+  fill: #f768a1;
+}
+.RdPu4-6 {
+  fill: #c51b8a;
+}
+.RdPu5-6 {
+  fill: #7a0177;
+}
+.RdPu0-7 {
+  fill: #feebe2;
+}
+.RdPu1-7 {
+  fill: #fcc5c0;
+}
+.RdPu2-7 {
+  fill: #fa9fb5;
+}
+.RdPu3-7 {
+  fill: #f768a1;
+}
+.RdPu4-7 {
+  fill: #dd3497;
+}
+.RdPu5-7 {
+  fill: #ae017e;
+}
+.RdPu6-7 {
+  fill: #7a0177;
+}
+.RdPu0-8 {
+  fill: #fff7f3;
+}
+.RdPu1-8 {
+  fill: #fde0dd;
+}
+.RdPu2-8 {
+  fill: #fcc5c0;
+}
+.RdPu3-8 {
+  fill: #fa9fb5;
+}
+.RdPu4-8 {
+  fill: #f768a1;
+}
+.RdPu5-8 {
+  fill: #dd3497;
+}
+.RdPu6-8 {
+  fill: #ae017e;
+}
+.RdPu7-8 {
+  fill: #7a0177;
+}
+.RdPu0-9 {
+  fill: #fff7f3;
+}
+.RdPu1-9 {
+  fill: #fde0dd;
+}
+.RdPu2-9 {
+  fill: #fcc5c0;
+}
+.RdPu3-9 {
+  fill: #fa9fb5;
+}
+.RdPu4-9 {
+  fill: #f768a1;
+}
+.RdPu5-9 {
+  fill: #dd3497;
+}
+.RdPu6-9 {
+  fill: #ae017e;
+}
+.RdPu7-9 {
+  fill: #7a0177;
+}
+.RdPu8-9 {
+  fill: #49006a;
 }
 
     </style>
