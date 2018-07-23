@@ -66,6 +66,7 @@
 .dotOutline {
   stroke: #fff;
   stroke-width: 3px;
+  fill: #eee;
 }
 .readyOutline {
   stroke: #0f0;

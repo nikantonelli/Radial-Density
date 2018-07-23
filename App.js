@@ -10,7 +10,7 @@ Ext.define('Rally.app.RadialDensity.app', {
             usePreliminaryEstimate: true,
             hideArchived: false,
             sizeStoriesByPlanEstimate: false,
-//            useScheduleState: false,
+            sortSize: false,
 //            useState: true,
             colourScheme: 'RdPu'
         }
@@ -124,12 +124,12 @@ Ext.define('Rally.app.RadialDensity.app', {
                 fieldLabel: 'Size Stories by Plan Estimate',
                 labelALign: 'middle'
             },
-            // {
-            //     name: 'useScheduleState',
-            //     xtype: 'rallycheckboxfield',
-            //     fieldLabel: 'Stories coloured by Schedule State',
-            //     labelALign: 'middle'
-            // },
+            {
+                name: 'sortSize',
+                xtype: 'rallycheckboxfield',
+                fieldLabel: 'Artefacts sorted by size',
+                labelALign: 'middle'
+            },
             // {
             //     name: 'useState',
             //     xtype: 'rallycheckboxfield',
@@ -270,6 +270,10 @@ Ext.define('Rally.app.RadialDensity.app', {
         hdrBox.insert(2,{
             xtype: 'rallyartifactsearchcombobox',
             fieldLabel: 'Choose Start Item :',
+            stateful: true,
+            stateId: this.getContext().getScopedStateId('RadialDensityPI'),
+            multiSelect: true,
+
             itemId: 'itemSelector',
             labelWidth: 100,
             queryMode: 'remote',
@@ -279,7 +283,31 @@ Ext.define('Rally.app.RadialDensity.app', {
             storeConfig: {
                 models: [ 'portfolioitem/' + ptype.rawValue ],
                 fetch: gApp.STORE_FETCH_FIELD_LIST,
-                context: gApp.getContext().getDataContext()
+                context: gApp.getContext().getDataContext(),
+                autoLoad: true,
+                listeners: {
+                    load: function(selector,store) {
+                        gApp.add( {
+                            xtype: 'container',
+                            itemId: 'loadingBox',
+                            cls: 'info--box',
+                            html: '<p> Loading... </p>'
+                        });
+                        if ( gApp._nodes) gApp._nodes = [
+                            {
+                                Name: 'World View',
+                                dependencies: [],
+                                local: false,
+                                record: {
+                                    data: {
+                                        _ref: 'root'
+                                    }
+                                }
+                            }
+                        ];
+                        gApp._getArtifacts(store);
+                    }
+                }
             },
             listeners: {
                 select: function(selector,store) {
@@ -289,9 +317,20 @@ Ext.define('Rally.app.RadialDensity.app', {
                         cls: 'info--box',
                         html: '<p> Loading... </p>'
                     });
-                    if ( gApp._nodes) gApp._nodes = [];
+                    if ( gApp._nodes) gApp._nodes = [
+                        {
+                            Name: 'World View',
+                            dependencies: [],
+                            local: false,
+                            record: {
+                                data: {
+                                    _ref: 'root'
+                                }
+                            }
+                        }
+                    ];
                     gApp._getArtifacts(store);
-                }
+                },
             }
         });
 
@@ -410,35 +449,42 @@ Ext.define('Rally.app.RadialDensity.app', {
     _refreshTree: function(viewBoxSize){
         var width = viewBoxSize[0], height = viewBoxSize[1], radius = Math.min(width, height)/2;
         var partition = d3.partition()
-            .size([2 * Math.PI, radius * radius]);
+            .size([2 * Math.PI, radius]);
 
         var arc = d3.arc()
             .startAngle(function(d) { return d.x0; })
             .endAngle(function(d) { return d.x1; })
-            .innerRadius(function(d) { return Math.sqrt(d.y0); })
-            .outerRadius(function(d) { return Math.sqrt(d.y1); });
+            .innerRadius(function(d) { return d.y0; })
+            .outerRadius(function(d) { return d.y1; });
 
         //Might want to change this...
         gApp._nodeTree.sum( function(d) {
-            if (d.record.isPortfolioItem()){
-                if ( gApp.getSetting('usePreliminaryEstimate')){
-                    retval = d.record.get('PreliminaryEstimate');
-                } else {
-                    retval = d.record.get('LeafStoryCount'); 
-                }
-            }else {
-                    //We are a User Story here
-                    if ( gApp.getSetting('sizeStoriesByPlanEstimate')){
-                        return d.record.get('PlanEstimate');
-                    }else {
-                        return 1 + d.record.get('DirectChildrenCount'); 
+            if (d.record.data.FormattedID) {
+                if (d.record.isPortfolioItem()){
+                    if ( gApp.getSetting('usePreliminaryEstimate')){
+                        retval = d.record.get('PreliminaryEstimate');
+                    } else {
+                        retval = d.record.get('LeafStoryCount'); 
                     }
+                }else {
+                        //We are a User Story here
+                        if ( gApp.getSetting('sizeStoriesByPlanEstimate')){
+                            return d.record.get('PlanEstimate');
+                        }else {
+                            return 1 + d.record.get('DirectChildrenCount'); 
+                        }
+                    }
+                // var retval = d.record.isPortfolioItem() ? d.record.get('LeafStoryPlanEstimateTotal') : d.record.get('PlanEstimate');
                 }
-            // var retval = d.record.isPortfolioItem() ? d.record.get('LeafStoryPlanEstimateTotal') : d.record.get('PlanEstimate');
-             return retval ? retval: 1;
+            return retval ? retval: 1;
         });
 
-        var nodetree = partition(gApp._nodeTree);
+        if ( gApp.getSetting('sortSize') ){
+            gApp._nodeTree.sort(function(a,b) { return b.value - a.value; });
+        }
+
+        var nodetree = partition(gApp._nodeTree)
+;
         var tree = d3.select('#tree');
         var path = tree.selectAll("path")
             .data(nodetree.descendants())
@@ -463,7 +509,7 @@ Ext.define('Rally.app.RadialDensity.app', {
                         else if (d.data.record.get('Successors').Count > 0) {
                             lClass.push("gotSuccessors");
                         }
-                        if (!d.data.record.get('State')) lClass.push("error--node");      //Not been set - which is an error in itself
+                        if (!d.data.record.get('State')) lClass = ["error--node"];      //Not been set - which is an error in itself
                         else lClass.push( gApp.settings.colourScheme + ((d.data.record.get('State').OrderIndex-1) + '-' + gApp.numStates[gApp._getOrdFromModel(d.data.record.get('_type'))]));
                     }
                 }
