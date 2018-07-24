@@ -7,9 +7,11 @@ Another take on the Portfolio Items page in Rally. This time using a radial char
 
 This app will allow you to select a type, then an item in your scope with that type and then it will create a tree of the child artifacts.
 
-The artefacts are arranged in rings to effectively show you the quantity of stories attached to it and then coloured by the density of the story points
+The artefacts are arranged in rings to effectively show you the quantity (or size) of stories attached to it and then coloured by the ScheduleState or State (if a portfolio item).
 
-So first up, you can get an idea of the progress of artefacts from any portfolio item level down to user story level. You will also be highlighted to the fact that there are dependencies by thefact that the segments flash - every second for predecessors and every 2 seconds fro successors.
+So first up, you can get an idea of the progress of artefacts from any portfolio item level down to user story level. You will also be highlighted to the fact that there are dependencies by thefact that the segments flash - every second for predecessors and every 2 seconds for successors.
+
+If you shift-CLICK on the segment, the app will give you the dependencies. If you just click on the segment, the app will give you a data panel with more information about the artefact.
 
 ![alt text](https://github.com/nikantonelli/Radial-Density/blob/master/Images/overview.png)
 
