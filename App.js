@@ -512,25 +512,25 @@ CARD_DISPLAY_FIELD_LIST:
                 if (d.data.record.data.ObjectID){
 
                     if (!gApp._dataCheckForItem(d)) {
-                        return "error--node";      
-                    }
-                    
-                    if (d.data.record.isUserStory()) { 
-                        lClass.push(gApp.settings.colourScheme  + (_.find (gApp._storyStates, { 'name' : d.data.record.get('ScheduleState') })).value + '-' + gApp._storyStates.length);
-                        lClass.push(d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"");
-                    }
-                    else if (d.data.record.isPortfolioItem()) {
-                        //Predecessors take precedence
-                        if (d.data.record.get('Predecessors').Count > 0) {
-                            lClass.push("gotPredecessors");
+                        lClass.push( "error--node");    
+                    }else {                    
+                        if (d.data.record.isUserStory()) { 
+                            lClass.push(gApp.settings.colourScheme  + (_.find (gApp._storyStates, { 'name' : d.data.record.get('ScheduleState') })).value + '-' + gApp._storyStates.length);
+                            lClass.push(d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"");
                         }
-                        else if (d.data.record.get('Successors').Count > 0) {
-                            lClass.push("gotSuccessors");
-                        }
-                        if (d.data.record.get('State')){
-                            lClass.push( gApp.settings.colourScheme + ((d.data.record.get('State').OrderIndex-1) + '-' + gApp.numStates[gApp._getOrdFromModel(d.data.record.get('_type'))]));
-                        } else {
-                            lClass.push('error--node');
+                        else if (d.data.record.isPortfolioItem()) {
+                            //Predecessors take precedence
+                            if (d.data.record.get('Predecessors').Count > 0) {
+                                lClass.push("gotPredecessors");
+                            }
+                            else if (d.data.record.get('Successors').Count > 0) {
+                                lClass.push("gotSuccessors");
+                            }
+                            if (d.data.record.get('State')){
+                                lClass.push( gApp.settings.colourScheme + ((d.data.record.get('State').OrderIndex-1) + '-' + gApp.numStates[gApp._getOrdFromModel(d.data.record.get('_type'))]));
+                            } else {
+                                lClass.push('error--node');
+                            }
                         }
                     }
                 }
