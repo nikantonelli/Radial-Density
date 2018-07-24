@@ -13,6 +13,8 @@ So first up, you can get an idea of the progress of artefacts from any portfolio
 
 The 'READY' (green) and 'BLOCKED' (red) flags are show as a bit of border of the required colour.
 
+You can also ask the app to 'SORT' the artefacts based on the sizing that oyu have asked for. It works clockwise from the top from largest to smallest.
+
 If you shift-CLICK on the segment, the app will give you the dependencies. If you just click on the segment, the app will give you a data panel with more information about the artefact.
 
 ![alt text](https://github.com/nikantonelli/Radial-Density/blob/master/Images/overview.png)
