@@ -24,3 +24,4 @@ And if you want to get idea of things relative to the Plan Estimate set on stori
 ![alt text](https://github.com/nikantonelli/Radial-Density/blob/master/Images/sizedByPlanEst.png)
 
 
+CAVEAT: There are still bugs with the autoloading of the last state set by the user!
