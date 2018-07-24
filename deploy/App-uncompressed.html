@@ -15,12 +15,12 @@ Ext.define('Rally.app.RadialDensity.app', {
     componentCls: 'app',
     config: {
         defaultSettings: {
-            includeStories: true,
+            includeStories: false,
             usePreliminaryEstimate: true,
             hideArchived: false,
-            sizeStoriesByPlanEstimate: false,
-            sortSize: false,
-//            useState: true,
+            sizeStoriesByPlanEstimate: true,
+            sortSize: true,
+            showLabels: true,
             colourScheme: 'RdPu'
         }
     },
@@ -62,6 +62,7 @@ Ext.define('Rally.app.RadialDensity.app', {
         'ScheduleState',
         'PlanEstimate',
         'PreliminaryEstimate',
+        'PreliminaryEstimateValue',
         'Description',
         'Notes',
         'Predecessors',
@@ -139,12 +140,12 @@ Ext.define('Rally.app.RadialDensity.app', {
                 fieldLabel: 'Artefacts sorted by size',
                 labelALign: 'middle'
             },
-            // {
-            //     name: 'useState',
-            //     xtype: 'rallycheckboxfield',
-            //     fieldLabel: 'PIs coloured by State',
-            //     labelALign: 'middle'
-            // },
+            {
+                name: 'showLabels',
+                xtype: 'rallycheckboxfield',
+                fieldLabel: 'Show IDs',
+                labelALign: 'middle'
+            },
             {
                 name: 'usePreliminaryEstimate',
                 xtype: 'rallycheckboxfield',
@@ -471,7 +472,7 @@ Ext.define('Rally.app.RadialDensity.app', {
             if (d.record.data.FormattedID) {
                 if (d.record.isPortfolioItem()){
                     if ( gApp.getSetting('usePreliminaryEstimate')){
-                        retval = d.record.get('PreliminaryEstimate');
+                        retval = d.record.get('PreliminaryEstimateValue');
                     } else {
                         retval = d.record.get('LeafStoryCount'); 
                     }
@@ -495,12 +496,14 @@ Ext.define('Rally.app.RadialDensity.app', {
         var nodetree = partition(gApp._nodeTree)
 ;
         var tree = d3.select('#tree');
-        var path = tree.selectAll("path")
-            .data(nodetree.descendants())
-            .enter().append("path")
-//            .attr("display", function(d) { return d.depth ? null : "none"; }) // hide inner ring
+
+        var nodes = tree.selectAll("node")
+                .data(nodetree.descendants())
+                .enter();
+
+        nodes.append("path")
             .attr("d", arc)
-//            .style("stroke", "#fff")
+            .each(arc.centroid)
             .attr("class", function (d) {   //Work out the individual dot colour
                 var lClass = ['dotOutline']; // Might want to use outline to indicate something later
                 if (d.data.record.data.ObjectID){
@@ -528,7 +531,18 @@ Ext.define('Rally.app.RadialDensity.app', {
             .on("mouseover", function(node, index, array) { gApp._nodeMouseOver(node,index,array);})
             .on("mouseout", function(node, index, array) { gApp._nodeMouseOut(node,index,array);})
             .on("click", function(node, index, array) { gApp._nodeClick(node,index,array);})
-            .each(gApp.stash);
+            .each(gApp.stash); //Save for animations.... TODO!
+
+        if ( gApp.getSetting('showLabels')){
+            nodes.append('text')
+                .attr("display", function(d) { return d.depth ? null : "none"; }) // hide inner ring
+                .attr("class", 'arctext')
+                .attr("text-anchor", "middle")
+                .attr("transform", function(d) {  
+                    var angle = d.x0 + ((d.x1 - d.x0)/2); 
+                    return "translate(" + arc.centroid(d) + ") rotate(" + (angle < Math.PI ? angle - Math.PI / 2 : angle + Math.PI / 2) * 180 / Math.PI + ")"; })
+                .text(function(d) { return d.data.Name; });
+        }
 
         d3.selectAll("input").on("change", function change() {
             var value = this.value === "count" ?
@@ -539,7 +553,7 @@ Ext.define('Rally.app.RadialDensity.app', {
                 .data(partition.value(value).nodes)
             .transition()
                 .duration(1500)
-                .attrTween("d", gApp.arcTween);
+                .attr("d", gApp.arcTween);
 
         });
 
@@ -548,8 +562,10 @@ Ext.define('Rally.app.RadialDensity.app', {
 
     stash: function (d) {
         //debugger;   //TODO: Get info and apply dependency links?
-        d.x0 = d.x;
-        d.dx0 = d.dx;
+        d.x0s = d.x0;
+        d.y0s = d.y0;
+        d.x1s = d.x1;
+        d.y1s = d.y1;
     },
 
     arcTween: function (a) {
@@ -18563,8 +18579,10 @@ Object.defineProperty(exports, '__esModule', { value: true });
 
 
     <style type="text/css">
-        .node text {
-  font: 14px sans-serif;
+        .arctext {
+  font: 10px sans-serif;
+  fill: "black";
+  stroke: "black";
 }
 .info--box {
   font-size: 18px;
@@ -18626,7 +18644,7 @@ Object.defineProperty(exports, '__esModule', { value: true });
 }
 .dotOutline {
   stroke: #fff;
-  stroke-width: 3px;
+  stroke-width: 2px;
   fill: #eee;
 }
 .readyOutline {

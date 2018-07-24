@@ -1,6 +1,8 @@
 
-.node text {
-  font: 14px sans-serif;
+.arctext {
+  font: 10px sans-serif;
+  fill: "black";
+  stroke: "black";
 }
 
 .info--box {
@@ -65,7 +67,7 @@
 
 .dotOutline {
   stroke: #fff;
-  stroke-width: 3px;
+  stroke-width: 2px;
   fill: #eee;
 }
 .readyOutline {
