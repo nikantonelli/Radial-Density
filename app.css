@@ -40,16 +40,6 @@
 .error--node  {
   fill: #f00;
 }
-.story--node  {
-  fill: #00ffff;
-}
-.task--node  {
-  fill: #cfcf0f;
-}
-.data--errors  {
-  stroke: #f00;
-  stroke-width: 3px;
-}
 .no--errors {
   stroke: #111;
   stroke-width: 2px;
@@ -68,21 +58,38 @@
 .dotOutline {
   stroke: #fff;
   stroke-width: 2px;
-  fill: #eee;
 }
 .readyOutline {
   stroke: #0f0;
-  stroke-width: 1px;  
+  stroke-width: 2px;  
 }
 .blockedOutline {
   stroke: #f00;
-  stroke-width: 1px;  
+  stroke-width: 2px;  
 }
 
+@keyframes textBlink {
+  50% {
+    opacity: 0.5;
+  }
+}
+@-webkit-keyframes textBlink {
+  50% {
+    opacity: 0.5;
+  }
+}
+.textBlink {
+  animation: textBlink 1s step-start 0s infinite;
+  -webkit-animation: textBlink 1s step-start 0s infinite;
+}
 .gotPredecessors {
+  animation: textBlink 1s step-start 0s infinite;
+  -webkit-animation: textBlink 1s step-start 0s infinite;
 
 }
 .gotSuccessors {
+  animation: textBlink 2s step-start 0s infinite;
+  -webkit-animation: textBlink 2s step-start 0s infinite;
 
 }
 

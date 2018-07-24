@@ -6,12 +6,13 @@ Ext.define('Rally.app.RadialDensity.app', {
     componentCls: 'app',
     config: {
         defaultSettings: {
-            includeStories: false,
+            includeStories: true,
             usePreliminaryEstimate: true,
             hideArchived: false,
             sizeStoriesByPlanEstimate: true,
-            sortSize: true,
+            sortSize: false,
             showLabels: true,
+            validateData: false,
             colourScheme: 'RdPu'
         }
     },
@@ -49,42 +50,48 @@ Ext.define('Rally.app.RadialDensity.app', {
         'CreationDate',
         'PercentDoneByStoryCount',
         'PercentDoneByStoryPlanEstimate',
+        'PredecessorsAndSuccessors',
         'State',
         'ScheduleState',
-        'PlanEstimate',
         'PreliminaryEstimate',
-        'PreliminaryEstimateValue',
+        'PlanEstimate',
         'Description',
         'Notes',
         'Predecessors',
         'Successors',
-        'UserStories',
-        'Tasks',
-        'WorkProduct',
         'OrderIndex',   //Used to get the State field order index
+        'PortfolioItemType',
+        'Ordinal',
+        'Release',
+        'Iteration',
+        'Milestones',
         //Customer specific after here. Delete as appropriate
-        'c_ProjectIDOBN',
-        'c_QRWP',
-        'c_RAGStatus',
-        'c_ProgressUpdate'
+//        'c_ProjectIDOBN',
+//        'c_QRWP',
+        'c_ProgressUpdate',
+        'c_RAIDSeverityCriticality',
+        'c_RISKProbabilityLevel',
+        'c_RAIDRequestStatus'   
     ],
-    CARD_DISPLAY_FIELD_LIST:
+CARD_DISPLAY_FIELD_LIST:
     [
-        'Name', //This one
-//        'Owner',
+        'Name',
+        'Owner',
         'PreliminaryEstimate',
-        'PlanEstimate',
-        // 'Parent',
-        // 'Project',
+        'Parent',
+        'Project',
         'PercentDoneByStoryCount',
         'PercentDoneByStoryPlanEstimate',
-        'ScheduleState',
+        'PredecessorsAndSuccessors',
         'State',
-        // 'c_ProjectIDOBN',
-        // 'c_QRWP',
-        // 'c_RAGStatus'
+        'Milestones',
+        //Customer specific after here. Delete as appropriate
+//        'c_ProjectIDOBN',
+//        'c_QRWP'
 
     ],
+
+
     items: [
         {
             xtype: 'container',
@@ -118,7 +125,18 @@ Ext.define('Rally.app.RadialDensity.app', {
                 fieldLabel: 'Include User Stories',
                 labelALign: 'middle'
             },
-            
+            {
+                name: 'validateData',
+                xtype: 'rallycheckboxfield',
+                fieldLabel: 'Check Data Sanity',
+                labelALign: 'middle'
+            },
+            {
+                name: 'showLabels',
+                xtype: 'rallycheckboxfield',
+                fieldLabel: 'Show IDs',
+                labelALign: 'middle'
+            },
             {
                 name: 'sizeStoriesByPlanEstimate',
                 xtype: 'rallycheckboxfield',
@@ -129,12 +147,6 @@ Ext.define('Rally.app.RadialDensity.app', {
                 name: 'sortSize',
                 xtype: 'rallycheckboxfield',
                 fieldLabel: 'Artefacts sorted by size',
-                labelALign: 'middle'
-            },
-            {
-                name: 'showLabels',
-                xtype: 'rallycheckboxfield',
-                fieldLabel: 'Show IDs',
                 labelALign: 'middle'
             },
             {
@@ -460,6 +472,7 @@ Ext.define('Rally.app.RadialDensity.app', {
 
         //Might want to change this...
         gApp._nodeTree.sum( function(d) {
+            var retval = 0;
             if (d.record.data.FormattedID) {
                 if (d.record.isPortfolioItem()){
                     if ( gApp.getSetting('usePreliminaryEstimate')){
@@ -470,14 +483,13 @@ Ext.define('Rally.app.RadialDensity.app', {
                 }else {
                         //We are a User Story here
                         if ( gApp.getSetting('sizeStoriesByPlanEstimate')){
-                            return d.record.get('PlanEstimate');
+                            retval = d.record.get('PlanEstimate');
                         }else {
-                            return 1 + d.record.get('DirectChildrenCount'); 
+                            retval = d.record.get('DirectChildrenCount'); 
                         }
                     }
-                // var retval = d.record.isPortfolioItem() ? d.record.get('LeafStoryPlanEstimateTotal') : d.record.get('PlanEstimate');
                 }
-            return retval ? retval: 1;
+            return retval ? retval : 1;
         });
 
         if ( gApp.getSetting('sortSize') ){
@@ -494,26 +506,32 @@ Ext.define('Rally.app.RadialDensity.app', {
 
         nodes.append("path")
             .attr("d", arc)
-            .each(arc.centroid)
+            .attr("display", function(d) { return d.depth ? null : "none"; }) // hide inner ring
             .attr("class", function (d) {   //Work out the individual dot colour
                 var lClass = ['dotOutline']; // Might want to use outline to indicate something later
                 if (d.data.record.data.ObjectID){
-                    if (d.data.record.isTask()) {
-                        lClass.push(d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"");
+
+                    if (!gApp._dataCheckForItem(d)) {
+                        return "error--node";      
                     }
-                    else if (d.data.record.isUserStory()) { 
+                    
+                    if (d.data.record.isUserStory()) { 
                         lClass.push(gApp.settings.colourScheme  + (_.find (gApp._storyStates, { 'name' : d.data.record.get('ScheduleState') })).value + '-' + gApp._storyStates.length);
                         lClass.push(d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"");
                     }
                     else if (d.data.record.isPortfolioItem()) {
+                        //Predecessors take precedence
                         if (d.data.record.get('Predecessors').Count > 0) {
                             lClass.push("gotPredecessors");
                         }
                         else if (d.data.record.get('Successors').Count > 0) {
                             lClass.push("gotSuccessors");
                         }
-                        if (!d.data.record.get('State')) lClass = ["error--node"];      //Not been set - which is an error in itself
-                        else lClass.push( gApp.settings.colourScheme + ((d.data.record.get('State').OrderIndex-1) + '-' + gApp.numStates[gApp._getOrdFromModel(d.data.record.get('_type'))]));
+                        if (d.data.record.get('State')){
+                            lClass.push( gApp.settings.colourScheme + ((d.data.record.get('State').OrderIndex-1) + '-' + gApp.numStates[gApp._getOrdFromModel(d.data.record.get('_type'))]));
+                        } else {
+                            lClass.push('error--node');
+                        }
                     }
                 }
                 return lClass.join(' ');
@@ -606,33 +624,34 @@ Ext.define('Rally.app.RadialDensity.app', {
         }
     },
 
+    _nodePopup: function(node, index, array) {
+        var popover = Ext.create('Rally.ui.popover.DependenciesPopover',
+            {
+                record: node.data.record,
+                target: node.card.el
+            }
+        );
+    },
+
     _nodeClick: function (node,index,array) {
         if (!(node.data.record.data.ObjectID)) return; //Only exists on real items
         //Get ordinal (or something ) to indicate we are the lowest level, then use "UserStories" instead of "Children"
-
-        var childField = null;
-        var model = null;
-
-        //Userstories have children, Portfolio Items have children... doh!
-         if (node.data.record.hasField('Tasks')) {
-            childField = 'Tasks';
-            model = 'UserStory';
-        }         
-        else if (node.data.record.hasField('Children')) {
-            childField = 'Children';
-            model = node.data.record.data.Children._type;
+        if (event.shiftKey) { 
+            gApp._nodePopup(node,index,array); 
+        }  else {
+            gApp._dataPanel(node,index,array);
         }
-        else if (node.data.record.hasField('UserStories')){
-            childField = 'UserStories';
-            model = node.data.record.data._type;
-        }
-        else return;    //Don't do this for tasks.
+    },
+
+    _dataPanel: function(node, index, array) {        
+        var childField = node.data.record.hasField('Children')? 'Children' : 'UserStories';
+        var model = node.data.record.hasField('Children')? node.data.record.data.Children._type : 'UserStory';
 
         Ext.create('Rally.ui.dialog.Dialog', {
             autoShow: true,
             draggable: true,
             closable: true,
-            width: 1100,
+            width: 1200,
             height: 800,
             style: {
                 border: "thick solid #000000"
@@ -651,15 +670,10 @@ Ext.define('Rally.app.RadialDensity.app', {
                     itemId: 'leftCol',
                     width: 500,
                 },
-                // {
-                //     xtype: 'container',
-                //     itemId: 'middleCol',
-                //     width: 400
-                // },
                 {
                     xtype: 'container',
                     itemId: 'rightCol',
-                    width: 580  //Leave 20 for scroll bar
+                    width: 700  //Leave 20 for scroll bar
                 }
             ],
             listeners: {
@@ -699,6 +713,7 @@ Ext.define('Rally.app.RadialDensity.app', {
                     }
                     //This is specific to customer. Features are used as RAIDs as well.
                     if ((this.record.self.ordinal === 1) && this.record.hasField('c_RAIDType')){
+                        var me = this;
                         var rai = this.down('#leftCol').add(
                             {
                                 xtype: 'rallypopoverchilditemslistview',
@@ -716,9 +731,42 @@ Ext.define('Rally.app.RadialDensity.app', {
                                     columnCfgs : [
                                         'FormattedID',
                                         'Name',
-                                        'c_RAIDType',
-                                        'State',
-                                        'c_RAGStatus',
+                                        {
+                                            text: 'RAID Type',
+                                            dataIndex: 'c_RAIDType',
+                                            minWidth: 80
+                                        },
+                                        {
+                                            text: 'RAG Status',
+                                            dataIndex: 'Release',  //Just so that a sorter gets called on column ordering
+                                            width: 60,
+                                            renderer: function (value, metaData, record, rowIdx, colIdx, store) {
+                                                var setColour = (record.get('c_RAIDType') === 'Risk') ?
+                                                        me.RISKColour : me.AIDColour;
+                                                
+                                                    return '<div ' + 
+                                                        'class="' + setColour(
+                                                                        record.get('c_RAIDSeverityCriticality'),
+                                                                        record.get('c_RISKProbabilityLevel'),
+                                                                        record.get('c_RAIDRequestStatus')   
+                                                                    ) + 
+                                                        '"' +
+                                                        '>&nbsp</div>';
+                                            },
+                                            listeners: {
+                                                mouseover: function(gridView,cell,rowIdx,cellIdx,event,record) { 
+                                                    Ext.create('Rally.ui.tooltip.ToolTip' , {
+                                                            target: cell,
+                                                            html:   
+                                                            '<p>' + '   Severity: ' + record.get('c_RAIDSeverityCriticality') + '</p>' +
+                                                            '<p>' + 'Probability: ' + record.get('c_RISKProbabilityLevel') + '</p>' +
+                                                            '<p>' + '     Status: ' + record.get('c_RAIDRequestStatus') + '</p>' 
+                                                        });
+                                                    
+                                                    return true;    //Continue processing for popover
+                                                }
+                                            }
+                                        },
                                         'ScheduleState'
                                     ]
                                 },
@@ -727,12 +775,12 @@ Ext.define('Rally.app.RadialDensity.app', {
                         );
                         rai.down('#header').destroy();
                    }
-
-                    var children = this.down('#leftCol').add(
+                    var children = this.down('#rightCol').add(
                         {
                             xtype: 'rallypopoverchilditemslistview',
                             target: array[index],
                             record: this.record,
+                            width: '95%',
                             childField: this.childField,
                             addNewConfig: null,
                             gridConfig: {
@@ -753,8 +801,24 @@ Ext.define('Rally.app.RadialDensity.app', {
                                         text: '% By Est',
                                         dataIndex: 'PercentDoneByStoryPlanEstimate'
                                     },
+                                    {
+                                        text: 'Timebox',
+                                        dataIndex: 'Project',  //Just so that the renderer gets called
+                                        minWidth: 80,
+                                        renderer: function (value, metaData, record, rowIdx, colIdx, store) {
+                                            var retval = '';
+                                                if (record.hasField('Iteration')) {
+                                                    retval = record.get('Iteration')?record.get('Iteration').Name:'NOT PLANNED';
+                                                } else if (record.hasField('Release')) {
+                                                    retval = record.get('Release')?record.get('Release').Name:'NOT PLANNED';
+                                                } else if (record.hasField('PlannedStartDate')){
+                                                    retval = Ext.Date.format(record.get('PlannedStartDate'), 'd/M/Y') + ' - ' + Ext.Date.format(record.get('PlannedEndDate'), 'd/M/Y');
+                                                }
+                                            return (retval);
+                                        }
+                                    },
                                     'State',
-                                    'c_RAGSatus',
+                                    'PredecessorsAndSuccessors',
                                     'ScheduleState'
                                 ]
                             },
@@ -765,77 +829,11 @@ Ext.define('Rally.app.RadialDensity.app', {
 
                     var cfd = Ext.create('Rally.apps.CFDChart', {
                         record: this.record,
+                        width: '95%',
                         container: this.down('#rightCol')
                     });
                     cfd.generateChart();
 
-                    //Now add predecessors and successors
-                    var preds = this.down('#rightCol').add(
-                        {
-                            xtype: 'rallypopoverchilditemslistview',
-                            target: array[index],
-                            record: this.record,
-                            childField: 'Predecessors',
-                            addNewConfig: null,
-                            gridConfig: {
-                                title: '<b>Predecessors:</b>',
-                                enableEditing: false,
-                                enableRanking: false,
-                                enableBulkEdit: false,
-                                showRowActionsColumn: false,
-                                columnCfgs : [
-                                'FormattedID',
-                                'Name',
-                                {
-                                    text: '% By Count',
-                                    dataIndex: 'PercentDoneByStoryCount'
-                                },
-                                {
-                                    text: '% By Est',
-                                    dataIndex: 'PercentDoneByStoryPlanEstimate'
-                                },
-                                'State',
-                                'c_RAGSatus',
-                                'ScheduleState'
-                                ]
-                            },
-                            model: this.model
-                        }
-                    );
-                    preds.down('#header').destroy();
-                    var succs = this.down('#rightCol').add(
-                        {
-                            xtype: 'rallypopoverchilditemslistview',
-                            target: array[index],
-                            record: this.record,
-                            childField: 'Successors',
-                            addNewConfig: null,
-                            gridConfig: {
-                                title: '<b>Successors:</b>',
-                                enableEditing: false,
-                                enableRanking: false,
-                                enableBulkEdit: false,
-                                showRowActionsColumn: false,
-                                columnCfgs : [
-                                'FormattedID',
-                                'Name',
-                                {
-                                    text: '% By Count',
-                                    dataIndex: 'PercentDoneByStoryCount'
-                                },
-                                {
-                                    text: '% By Est',
-                                    dataIndex: 'PercentDoneByStoryPlanEstimate'
-                                },
-                                'State',
-                                'c_RAGSatus',
-                                'ScheduleState'
-                                ]
-                            },
-                            model: this.model
-                        }
-                    );
-                    succs.down('#header').destroy();
                 }
             },
 
@@ -849,40 +847,118 @@ Ext.define('Rally.app.RadialDensity.app', {
                                     property: 'c_RAIDType',
                                     operator: '=',
                                     value: ''
-                                }
+                                },
+                                fetch: gApp.STORE_FETCH_FIELD_LIST,
+                                pageSize: 50
                             };
                         default:
-                            return {};
+                            return {
+                                fetch: gApp.STORE_FETCH_FIELD_LIST,
+                                pageSize: 50
+                            };
                     }
                 }
-                else return {};
+                else return {
+                    fetch: gApp.STORE_FETCH_FIELD_LIST,
+                    pageSize: 50                                                    
+                };
             },
 
             //This is specific to customer. Features are used as RAIDs as well.
             RAIDStoreConfig: function() {
                 var retval = {};
 
-                if (this.record.hasField('c_RAIDType') && this.record.hasField('c_RAGStatus')){
+                if (this.record.hasField('c_RAIDType')){
                             return {
                                 filters: [{
                                     property: 'c_RAIDType',
                                     operator: '!=',
                                     value: ''
-                                },
-                                {
-                                    property: 'c_RAGStatus',
-                                    operator: '=',
-                                    value: 'RED'
-                                }]
+                                }],
+                                fetch: gApp.STORE_FETCH_FIELD_LIST,
+                                pageSize: 50
                             };
                     }
-                    else return {};
+                else return {
+                    fetch: gApp.STORE_FETCH_FIELD_LIST,
+                    pageSize: 50
+                };
+            },
+
+            RISKColour: function(severity, probability, state) {
+                if ( state === 'Closed' || state === 'Cancelled') {
+                    return 'RAID-blue';
                 }
-            });
+
+                if (severity === 'Exceptional') {
+                    return 'RAID-red textBlink';
+                }
+
+                if (severity ==='High' && (probability === 'Likely' || probability === 'Certain'))
+                {
+                    return 'RAID-red';
+                }
+
+                if (
+                    (severity ==='High' && (probability === 'Unlikely' || probability === 'Possible')) ||
+                    (severity ==='Moderate' && (probability === 'Likely' || probability === 'Certain'))
+                ){
+                    return 'RAID-amber';
+                }
+                if (
+                    (severity ==='Moderate' && (probability === 'Unlikely' || probability === 'Possible')) ||
+                    (severity ==='Low')
+                ){
+                    return 'RAID-green';
+                }
+                
+                var lClass = 'RAID-missing';
+                if (!severity) lClass += '-severity';
+                if (!probability) lClass += '-probability';
+
+                return lClass;
+            },
+
+            AIDColour: function(severity, probability, state) {
+                if ( state === 'Closed' || state === 'Cancelled') {
+                    return 'RAID-blue';
+                }
+
+                if (severity === 'Exceptional') 
+                {
+                    return 'RAID-red';
+                }
+
+                if (severity === 'High') 
+                {
+                    return 'RAID-amber';
+                }
+
+                if ((severity === 'Moderate') ||
+                    (severity === 'Low')
+                ){
+                    return 'RAID-green';                    
+                }
+                return 'RAID-missing-severity-probability'; //Mark as unknown
+            }
+        });
     },
 
+    //Return truey for OK
     _dataCheckForItem: function(d){
-        return "";
+        if (!gApp.getSetting('validateData')) return true;
+        if (d.data.record.isPortfolioItem()) {
+            if (!d.data.record.get('State') ||
+                !d.data.record.get('PreliminaryEstimate')
+            ){
+                return false;
+            }
+        } else if (d.data.record.isUserStory()){
+            if (!d.data.record.get('PlanEstimate')){
+                return false;
+            }
+        }                          
+        return true;
     },
 
     _createNodes: function(data) {
