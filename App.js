@@ -9,7 +9,7 @@ Ext.define('Rally.app.RadialDensity.app', {
             includeStories: true,
             usePreliminaryEstimate: true,
             hideArchived: false,
-            sizeStoriesByPlanEstimate: true,
+            sizeStoriesByPlanEstimate: false,
             sortSize: false,
             showLabels: true,
             validateData: false,
@@ -198,7 +198,7 @@ CARD_DISPLAY_FIELD_LIST:
        //Get all the nodes and the "Unknown" parent virtual nodes
        var nodetree = gApp._createTree(gApp._nodes);
        gApp._nodeTree = nodetree;
-        var viewBoxSize = [ 960,720 ];
+        var viewBoxSize = [ 800,800 ];  //It's a circle, so can be the same in both directions!
         gApp._setViewBox(viewBoxSize);
         g = d3.select('svg').append('g')
             .attr('id','tree')
@@ -464,7 +464,8 @@ CARD_DISPLAY_FIELD_LIST:
         var partition = d3.partition()
             .size([2 * Math.PI, radius]);
 
-        var arc = d3.arc()
+        //Define a global for this as we can access from anywhere.
+        arc = d3.arc()
             .startAngle(function(d) { return d.x0; })
             .endAngle(function(d) { return d.x1; })
             .innerRadius(function(d) { return d.y0; })
@@ -611,8 +612,9 @@ CARD_DISPLAY_FIELD_LIST:
                     listeners: {
                         show: function(card){
                             //Move card to the centre of the screen
-                            var xpos = array[index].getScreenCTM().e;
-                            var ypos = array[index].getScreenCTM().f;
+                            var pos = arc.centroid(node);
+                            var xpos = array[index].getScreenCTM().e + pos[0];
+                            var ypos = array[index].getScreenCTM().f + pos[1];
                             card.el.setLeftTop( (xpos - gApp.MIN_CARD_WIDTH) < 0 ? xpos + gApp.MIN_CARD_WIDTH + gApp.MIN_COLUMN_WIDTH : xpos - gApp.MIN_CARD_WIDTH, 
                                 (ypos + this.getSize().height)> gApp.getSize().height ? gApp.getSize().height - (this.getSize().height+20) : ypos);  //Tree is rotated
                         }
@@ -628,9 +630,13 @@ CARD_DISPLAY_FIELD_LIST:
         var popover = Ext.create('Rally.ui.popover.DependenciesPopover',
             {
                 record: node.data.record,
-                target: node.card.el
+                target: node.card.el,
+                //Can't use chevron.autoShow.false here due to code in sdk
             }
         );
+        var pos = arc.centroid(node);
+        popover.el.setLeftTop(array[index].getScreenCTM().e + pos[0], array[index].getScreenCTM().f + pos[1]);
+        popover.chevron.hide(); //Get rid of the floating arrow.
     },
 
     _nodeClick: function (node,index,array) {

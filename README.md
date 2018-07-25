@@ -9,7 +9,7 @@ This app will allow you to select a type, then an item in your scope with that t
 
 The artefacts are arranged in rings to effectively show you the quantity (or size) of stories attached to it and then coloured by the ScheduleState or State (if a portfolio item). The artefact types are from any Portfolio Item type down - and will include stories if you want (set via the options).
 
-So first up, you can get an idea of the progress of artefacts from any portfolio item level down to user story level. You will also be highlighted to the fact that there are dependencies by thefact that the segments flash - every second for predecessors and every 2 seconds for successors.
+So first up, you can get an idea of the progress of artefacts from any portfolio item level down to user story level. You will also be highlighted to the fact that there are dependencies by the fact that the segments flash - every second for ones with predecessors and every 2 seconds for successors.
 
 The 'READY' (green) and 'BLOCKED' (red) flags are show as a bit of border of the required colour.
 
@@ -27,5 +27,8 @@ And if you want to get idea of things relative to the Plan Estimate set on stori
 
 ![alt text](https://github.com/nikantonelli/Radial-Density/blob/master/Images/sizedByPlanEst.png)
 
+The data panel currently looks like this
+
+![alt text](https://github.com/nikantonelli/Radial-Density/blob/master/Images/dataPanel.png)
 
 CAVEAT: There are still bugs with the autoloading of the last state set by the user!
