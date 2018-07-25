@@ -68,6 +68,13 @@
   stroke-width: 2px;  
 }
 
+.dependency {
+  stroke: #3040f0;
+  stroke-width: 2px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 @keyframes textBlink {
   50% {
     opacity: 0.5;

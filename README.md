@@ -17,6 +17,8 @@ You can also ask the app to 'SORT' the artefacts based on the sizing that you ha
 
 If you shift-CLICK on the segment, the app will give you the dependencies. If you just click on the segment, the app will give you a data panel with more information about the artefact.
 
+You can also opt for a dependencies overlay. It will highlight where there are predecessors. If the predecessor is not in the data set you have selected, the line goes to the centre.
+
 ![alt text](https://github.com/nikantonelli/Radial-Density/blob/master/Images/overview.png)
 
 If you want to see problems with your data sanity, the segments can be made to go RED:
@@ -30,5 +32,9 @@ And if you want to get idea of things relative to the Plan Estimate set on stori
 The data panel currently looks like this
 
 ![alt text](https://github.com/nikantonelli/Radial-Density/blob/master/Images/dataPanel.png)
+
+Dependenciy Overlay looks like this
+
+![alt text](https://github.com/nikantonelli/Radial-Density/blob/master/Images/depsOverlay.png)
 
 CAVEAT: There are still bugs with the autoloading of the last state set by the user!

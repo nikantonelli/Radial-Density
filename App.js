@@ -13,6 +13,7 @@ Ext.define('Rally.app.RadialDensity.app', {
             sortSize: false,
             showLabels: true,
             validateData: false,
+            flashDeps: false,
             colourScheme: 'RdPu'
         }
     },
@@ -138,6 +139,12 @@ CARD_DISPLAY_FIELD_LIST:
                 labelALign: 'middle'
             },
             {
+                name: 'flashDeps',
+                xtype: 'rallycheckboxfield',
+                fieldLabel: 'Flash with Dependencies',
+                labelALign: 'middle'
+            },
+            {
                 name: 'sizeStoriesByPlanEstimate',
                 xtype: 'rallycheckboxfield',
                 fieldLabel: 'Size Stories by Plan Estimate',
@@ -185,6 +192,7 @@ CARD_DISPLAY_FIELD_LIST:
                 }
             );
             d3.select("#tree").remove();
+            d3.select("#depsOverlay").remove();
             gApp._nodeTree = null;
         }
         gApp._enterMainApp();
@@ -200,10 +208,20 @@ CARD_DISPLAY_FIELD_LIST:
        gApp._nodeTree = nodetree;
         var viewBoxSize = [ 800,800 ];  //It's a circle, so can be the same in both directions!
         gApp._setViewBox(viewBoxSize);
-        g = d3.select('svg').append('g')
+
+        //Add a group for the tree of artefacts
+        d3.select('svg').append('g')
             .attr('id','tree')
             //Transform to the centre of the screen
             .attr("transform","translate(" + viewBoxSize[0]/2 + "," + viewBoxSize[1]/2 + ")");
+
+        //Add in an overlay if the user wants to see dependencies
+        d3.select('svg').append('g')
+            .attr('id','depsOverlay')
+            .attr("visibility", "hidden")
+            //Transform to the centre of the screen
+            .attr("transform","translate(" + viewBoxSize[0]/2 + "," + viewBoxSize[1]/2 + ")");
+        
         gApp._refreshTree(viewBoxSize);    //Need to redraw if things are added
     },
 
@@ -347,14 +365,14 @@ CARD_DISPLAY_FIELD_LIST:
             }
         });
 
-        var buttonTxt = "Colour Codes";
+        var button1Txt = "Colour Codes";
         if (!gApp.down('#colourButton')){
             hdrBox.add({
                 xtype: 'rallybutton',
                 itemId: 'colourButton',
                 margin: '10 0 5 20',
                 ticked: false,
-                text: buttonTxt,
+                text: button1Txt,
                 handler: function() {
                     if (this.ticked === false) {
                         this.setText('Return');
@@ -362,7 +380,7 @@ CARD_DISPLAY_FIELD_LIST:
                         d3.select("#colourLegend").attr("visibility","visible");
                         d3.select("#tree").attr("visibility", "hidden");
                     } else {
-                        this.setText(buttonTxt);
+                        this.setText(button1Txt);
                         this.ticked = false;
                         d3.select("#colourLegend").attr("visibility","hidden");
                         d3.select("#tree").attr("visibility", "visible");
@@ -370,8 +388,81 @@ CARD_DISPLAY_FIELD_LIST:
                 }
             });
         }
+        var button2Txt = "Show Dependencies";
+        if (!gApp.down('#depsButton')){
+            hdrBox.add({
+                xtype: 'rallybutton',
+                itemId: 'depsButton',
+                margin: '10 0 5 20',
+                ticked: false,
+                text: button2Txt,
+                handler: function() {
+                    if (this.ticked === false) {
+                        this.setText('Hide Dependencies');
+                        this.ticked = true;
+                        d3.select("#depsOverlay").attr("visibility","visible");
+                    } else {
+                        this.setText(button2Txt);
+                        this.ticked = false;
+                        d3.select("#depsOverlay").attr("visibility","hidden");
+                    }
+                }
+            });
+        }
     },
 
+    _fetchPredecessors: function(d) {
+
+        d.data.record.getCollection('Predecessors').load(
+            {
+                fetch: true,
+                callback: function (records, operation, success) {
+                    if (success) {
+                        var i = gApp._findNodeByRef(d.data.record.data._ref);
+                        var start = gApp.inoid(i);
+                        var end = [0,0];    //If record is not found, draw a line to the centre.
+
+                        _.each(records, function(record){
+                            var j = gApp._findNodeByRef(record.data._ref);
+                            if ( j ) {  // Record is in those selected
+                                end = gApp.inoid(j);
+                            }
+                            var inbetween = [(end[0] + start[0])/4,(end[1] + start[1])/4]
+                            console.log(start, inbetween, end);
+                            var dOvl = d3.select("#depsOverlay");
+                            dOvl.append('path')
+//                                .attr("d","M" + start + "A" + inbetween + ",0,0,0,"  + end + "A"+inbetween + ",0,0,1" + start + "z")
+                                .attr("d","M" + start + "Q" + inbetween + " "  + end + "Q" + inbetween + " " + start)
+                                .attr("class", "dependency");
+                                dOvl.append('circle')
+                                .attr("r",4)
+                                .attr("cx", start[0])
+                                .attr("cy", start[1])
+                                .attr("class", "dependency");
+                                dOvl.append('circle')
+                                .attr("r",4)
+                                .attr("cx", end[0])
+                                .attr("cy", end[1])
+                                .attr("class", "dependency");
+                        });
+                    }
+                }
+            }
+        );
+    },
+    
+    _fetchSuccessors: function(d) {
+
+    },
+    
+    _processPredecessors: function(d) {
+
+    },
+    
+    _processSuccessors: function(d) {
+
+    },
+    
     _getArtifacts: function(data) {
         //On re-entry send an event to redraw
 
@@ -459,6 +550,13 @@ CARD_DISPLAY_FIELD_LIST:
         svg.attr('viewBox', '0 0 ' + viewBoxSize[0] + ' ' + viewBoxSize[1]);
     },
 
+    inoid: function(d) { 
+        debugger;
+        var r = d.y0 + ((d.y1 - d.y0) / 10),
+            a = (d.x0 + d.x1) / 2 - Math.PI / 2;
+        return [Math.cos(a) * r, Math.sin(a) * r];
+    },
+
     _refreshTree: function(viewBoxSize){
         var width = viewBoxSize[0], height = viewBoxSize[1], radius = Math.min(width, height)/2;
         var partition = d3.partition()
@@ -471,6 +569,8 @@ CARD_DISPLAY_FIELD_LIST:
             .innerRadius(function(d) { return d.y0; })
             .outerRadius(function(d) { return d.y1; });
 
+
+console.log(gApp._nodeTree);
         //Might want to change this...
         gApp._nodeTree.sum( function(d) {
             var retval = 0;
@@ -521,18 +621,20 @@ CARD_DISPLAY_FIELD_LIST:
                         }
                         else if (d.data.record.isPortfolioItem()) {
                             //Predecessors take precedence
-                            if (d.data.record.get('Predecessors').Count > 0) {
-                                lClass.push("gotPredecessors");
-                            }
-                            else if (d.data.record.get('Successors').Count > 0) {
-                                lClass.push("gotSuccessors");
-                            }
                             if (d.data.record.get('State')){
                                 lClass.push( gApp.settings.colourScheme + ((d.data.record.get('State').OrderIndex-1) + '-' + gApp.numStates[gApp._getOrdFromModel(d.data.record.get('_type'))]));
                             } else {
                                 lClass.push('error--node');
                             }
                         }
+                        if (d.data.record.get('Predecessors').Count > 0) {
+                          if (gApp.getSetting('flashDeps')) lClass.push("gotPredecessors");
+                            gApp._fetchPredecessors(d);
+                        }
+                        else if (d.data.record.get('Successors').Count > 0) {
+                            if (gApp.getSetting('flashDeps')) lClass.push("gotSuccessors");
+                            gApp._fetchSuccessors(d);
+                        }                            
                     }
                 }
                 return lClass.join(' ');
@@ -976,6 +1078,13 @@ CARD_DISPLAY_FIELD_LIST:
             nodes.push({'Name': record.get('FormattedID'), 'record': record, 'local': localNode, 'dependencies': []});
         });
         return nodes;
+    },
+
+    _findNodeByRef: function(ref) {
+        var found = d3.selectAll('path').filter(function(d) { 
+            return d && (d.data.record.data._ref === ref);
+        });
+        return found.empty() ? 0 : found.data()[0];    //Hope to god there is only one found....
     },
 
     _findParentType: function(record) {
