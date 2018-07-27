@@ -111,14 +111,14 @@ Ext.define("TreeExporter", {
 
         while (item.depth > level) {
             parent = parent.parent;
-            smallString += ","
+            smallString += ",";
             level +=1;
         }
         if (item.depth > 0) {
             smallString += item.data.record.get("FormattedID");
             level = parent.height - item.depth;
             while (level > 0) { 
-                smallString += ","
+                smallString += ",";
                 level -=1;
             }
             console.log(smallString);

@@ -369,7 +369,7 @@ _objectFromYearFirstDate: function (dateArray) {
             yAxis: [
                 {
                     title: {
-                        text: "Count"
+                        text: "Points"
                     }
                 }
             ],

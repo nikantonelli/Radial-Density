@@ -23,7 +23,19 @@ Ext.define('Rally.app.RadialDensity.app', {
             showLabels: true,
             validateData: false,
             flashDeps: false,
+            showFilter: true,
             colourScheme: 'RdPu'
+        }
+    },
+
+    WorldViewNode: {
+        Name: 'World View',
+        dependencies: [],
+        local: false,
+        record: {
+            data: {
+                FormattedID: 'R0'
+            }
         }
     },
 
@@ -118,7 +130,7 @@ CARD_DISPLAY_FIELD_LIST:
     ],
 
     onSettingsUpdate: function() {
-        gApp._redrawTree();
+        this._redrawTree();
     },
 
     getSettingsFields: function() {
@@ -170,6 +182,12 @@ CARD_DISPLAY_FIELD_LIST:
                 xtype: 'rallycheckboxfield',
                 fieldLabel: 'Use Preliminary Estimate Size',
                 labelALign: 'middle'
+            },
+            {
+                xtype: 'rallycheckboxfield',
+                fieldLabel: 'Show Advanced filter',
+                name: 'showFilter',
+                labelAlign: 'middle'
             }
             
         ];
@@ -183,12 +201,11 @@ CARD_DISPLAY_FIELD_LIST:
         // this.on('drawChildren', this._drawChildren);
         this.timer = setTimeout(this._redrawTree, 1000);
         this.exporter = Ext.create("TreeExporter");
-
     },
 
     _resetTimer: function() {
-        if ( gApp.timer) clearTimeout(gApp.timer);
-        gApp.timer = setTimeout(gApp._redrawTree, 1000);
+        if ( this.timer) clearTimeout(this.timer);
+        this.timer = setTimeout(this._redrawTree, 1000);
     },
     
     _redrawTree: function() {
@@ -271,29 +288,82 @@ CARD_DISPLAY_FIELD_LIST:
         //Choose a point when all are 'ready' to jump off into the rest of the app
         var hdrBox = this.insert (0,{
             xtype: 'container',
-            itemId: 'headerBox',
-            layout: 'hbox',
+            layout: 'vbox',
             items: [
+                { 
+                    xtype: 'container',
+                    itemId: 'headerBox',
+                    layout: 'hbox',
+                    items: [
+                        {
+                            xtype:  'rallyportfolioitemtypecombobox',
+                            itemId: 'piType',
+                            fieldLabel: 'Choose Portfolio Type :',
+                            labelWidth: 100,
+                            margin: '5 0 5 20',
+                            defaultSelectionPosition: 'first',
+                            storeConfig: {
+                                fetch: ['DisplayName', 'ElementName','Ordinal','Name','TypePath', 'Attributes'],
+                                listeners: {
+                                    load: function(store) {
+                                        gApp._typeStore = store;
+                                        gApp._addFilterPanel();
+                                        gApp._addColourHelper();
+                                    }
+                                }
+                            },
+                            listeners: {
+                                select: function() { 
+                                    gApp._kickOff();
+                                }
+                            }
+                        }
+                    ]
+                },
                 {
                     xtype: 'container',
+                    width: 1024,
                     itemId: 'filterBox'
-                },
-                {
-                    xtype:  'rallyportfolioitemtypecombobox',
-                    itemId: 'piType',
-                    fieldLabel: 'Choose Portfolio Type :',
-                    labelWidth: 100,
-                    margin: '5 0 5 20',
-                    defaultSelectionPosition: 'first',
-                    storeConfig: {
-                        fetch: ['DisplayName', 'ElementName','Ordinal','Name','TypePath', 'Attributes']
-                    },
-                    listeners: {
-                        select: function() { gApp._kickOff();},    //Jump off here to add portfolio size selector
-                        ready: function() { gApp._addColourHelper(); }
-                    }
-                },
+                }
             ]
+        });
+    },
+
+    _onFilterReady: function(inlineFilterPanel) {
+        gApp.down('#filterBox').add(inlineFilterPanel);
+    },
+
+    _onFilterChange: function(inlineFilterButton) {
+        gApp._filterInfo = inlineFilterButton.getTypesAndFilters();
+        gApp._loadStoreLocal();
+    },
+
+    _filterPanel: false,
+
+    //We don't want the initial setup firing of the event
+    _fireFilterPanelEvent: function() {
+        if (!gApp._filterPanel) {
+            gApp._filterPanel = true;
+        }
+        else {
+            gApp._loadStoreLocal();
+        }
+    },
+
+    _loadStoreLocal: function() {
+        var ptype = gApp.down('#piType');
+        Ext.create('Rally.data.wsapi.Store', {
+            model: 'portfolioitem/' + ptype.rawValue.toLowerCase(),
+            filters: gApp._filterInfo.filters,
+//            models: gApp._filterInfo.types,
+            autoLoad: true,
+            fetch: gApp.STORE_FETCH_FIELD_LIST,
+            listeners: {
+                load: function( store, records, success) {
+                    gApp._nodes = [ gApp.WorldViewNode ];
+                    gApp._getArtifacts(records);
+                }
+            }
         });
     },
 
@@ -303,31 +373,47 @@ CARD_DISPLAY_FIELD_LIST:
     _kickOff: function() {
         var ptype = gApp.down('#piType');
         var hdrBox = gApp.down('#headerBox');
-        gApp._typeStore = ptype.store;
-        var selector = gApp.down('#itemSelector');
-        if ( selector) {
-            selector.destroy();
-        }
-        hdrBox.insert(2,{
-            xtype: 'rallyartifactsearchcombobox',
-            fieldLabel: 'Choose Start Item :',
-            stateful: true,
-            stateId: this.getContext().getScopedStateId('RadialDensityPI'),
-            multiSelect: true,
 
-            itemId: 'itemSelector',
-            labelWidth: 100,
-            queryMode: 'remote',
-            pageSize: 25,
-            width: 600,
-            margin: '10 0 5 20',
-            storeConfig: {
-                models: [ 'portfolioitem/' + ptype.rawValue ],
-                fetch: gApp.STORE_FETCH_FIELD_LIST,
-                context: gApp.getContext().getDataContext(),
-                autoLoad: true,
+        if (!gApp.getSetting('showFilter')){
+            var selector = gApp.down('#itemSelector');
+            if ( selector) {
+                selector.destroy();
+            }
+            hdrBox.insert(2,{
+                xtype: 'rallyartifactsearchcombobox',
+                fieldLabel: 'Choose Start Item :',
+                stateful: true,
+                stateId: this.getContext().getScopedStateId('RadialDensityPI'),
+                multiSelect: true,
+
+                itemId: 'itemSelector',
+                labelWidth: 100,
+                queryMode: 'remote',
+                pageSize: 25,
+                width: 600,
+                margin: '10 0 5 20',
+                storeConfig: {
+                    models: [ 'portfolioitem/' + ptype.rawValue ],
+                    fetch: gApp.STORE_FETCH_FIELD_LIST,
+                    context: gApp.getContext().getDataContext(),
+                    autoLoad: true,
+                    listeners: {
+                        load: function(store,records) {
+                            gApp.add( {
+                                xtype: 'container',
+                                itemId: 'loadingBox',
+                                cls: 'info--box',
+                                html: '<p> Loading... </p>'
+                            });
+                            if ( gApp._nodes) gApp._nodes = [
+                                gApp.WorldViewNode
+                            ];
+                            gApp._getArtifacts(records);
+                        }
+                    }
+                },
                 listeners: {
-                    load: function(selector,store) {
+                    select: function(store, records) {
                         gApp.add( {
                             xtype: 'container',
                             itemId: 'loadingBox',
@@ -335,49 +421,52 @@ CARD_DISPLAY_FIELD_LIST:
                             html: '<p> Loading... </p>'
                         });
                         if ( gApp._nodes) gApp._nodes = [
-                            {
-                                Name: 'World View',
-                                dependencies: [],
-                                local: false,
-                                record: {
-                                    data: {
-                                        _ref: 'root'
-                                    }
-                                }
-                            }
+                            gApp.WorldViewNode
                         ];
-                        gApp._getArtifacts(store);
+                        gApp._getArtifacts(records);
+                    },
+                }
+            });
+        } 
+
+        var button3Txt = "Export CSV";
+        if (!gApp.down('#csvButton')){
+            hdrBox.insert(1,{
+                xtype: 'rallybutton',
+                itemId: 'csvButton',
+                margin: '10 0 5 20',
+                text: button3Txt,
+                handler: function() {
+                    gApp.exporter.exportCSV(gApp._nodeTree);
+                }
+            });
+        }
+        var button2Txt = "Show Dependencies";
+        if (!gApp.down('#depsButton')){
+            hdrBox.insert(1,{
+                xtype: 'rallybutton',
+                itemId: 'depsButton',
+                margin: '10 0 5 20',
+                ticked: false,
+                text: button2Txt,
+                handler: function() {
+                    if (this.ticked === false) {
+                        this.setText('Hide Dependencies');
+                        this.ticked = true;
+                        d3.select("#colourLegend").attr("visibility","hidden");
+                        d3.select("#depsOverlay").attr("visibility","visible");
+                        d3.select("#tree").attr("visibility", "visible");
+                    } else {
+                        this.setText(button2Txt);
+                        this.ticked = false;
+                        d3.select("#depsOverlay").attr("visibility","hidden");
                     }
                 }
-            },
-            listeners: {
-                select: function(selector,store) {
-                    gApp.add( {
-                        xtype: 'container',
-                        itemId: 'loadingBox',
-                        cls: 'info--box',
-                        html: '<p> Loading... </p>'
-                    });
-                    if ( gApp._nodes) gApp._nodes = [
-                        {
-                            Name: 'World View',
-                            dependencies: [],
-                            local: false,
-                            record: {
-                                data: {
-                                    _ref: 'root'
-                                }
-                            }
-                        }
-                    ];
-                    gApp._getArtifacts(store);
-                },
-            }
-        });
-
+            });
+        }
         var button1Txt = "Colour Codes";
         if (!gApp.down('#colourButton')){
-            hdrBox.add({
+            hdrBox.insert(1,{
                 xtype: 'rallybutton',
                 itemId: 'colourButton',
                 margin: '10 0 5 20',
@@ -400,41 +489,62 @@ CARD_DISPLAY_FIELD_LIST:
                 }
             });
         }
-        var button2Txt = "Show Dependencies";
-        if (!gApp.down('#depsButton')){
-            hdrBox.add({
-                xtype: 'rallybutton',
-                itemId: 'depsButton',
-                margin: '10 0 5 20',
-                ticked: false,
-                text: button2Txt,
-                handler: function() {
-                    if (this.ticked === false) {
-                        this.setText('Hide Dependencies');
-                        this.ticked = true;
-                        d3.select("#colourLegend").attr("visibility","hidden");
-                        d3.select("#depsOverlay").attr("visibility","visible");
-                        d3.select("#tree").attr("visibility", "visible");
-                    } else {
-                        this.setText(button2Txt);
-                        this.ticked = false;
-                        d3.select("#depsOverlay").attr("visibility","hidden");
+    },
+
+    _addFilterPanel: function() {
+        var hdrBox = gApp.down('#headerBox');
+        //Add a filter panel
+        var blackListFields = ['Successors', 'Predecessors', 'DisplayColor'],
+            whiteListFields = ['Milestones', 'Tags'];
+        var modelNames = [];
+        for ( var i = 0; i <= gApp._highestOrdinal(); i++){
+            modelNames.push(gApp._getModelFromOrd(i));
+        }
+
+        if (gApp.getSetting('includeStories')) modelNames.push('hierarchicalrequirement');
+        
+        hdrBox.add({
+            xtype: 'rallyinlinefiltercontrol',
+            itemId: 'filterPanel',
+            context: this.getContext(),
+            margin: '5 0 0 60',
+            height: 26,
+            inlineFilterButtonConfig: {
+                stateful: true,
+                stateId: this.getContext().getScopedStateId('inline-filter'),
+                context: this.getContext(),
+                modelNames: modelNames,
+                filterChildren: false,
+                inlineFilterPanelConfig: {
+                    quickFilterPanelConfig: {
+                        defaultFields: ['ArtifactSearch', 'Owner'],
+                        addQuickFilterConfig: {
+                            blackListFields: blackListFields,
+                            whiteListFields: whiteListFields
+                        }
+                    },
+                    advancedFilterPanelConfig: {
+                        advancedFilterRowsConfig: {
+                            propertyFieldConfig: {
+                                blackListFields: blackListFields,
+                                whiteListFields: whiteListFields
+                            }
+                        }
                     }
+                },
+                listeners: {
+                    inlinefilterchange: gApp._onFilterChange,
+                    inlinefilterready: gApp._onFilterReady,
+                    scope: this
                 }
-            });
-        }
-        var button3Txt = "Export CSV";
-        if (!gApp.down('#csvButton')){
-            hdrBox.add({
-                xtype: 'rallybutton',
-                itemId: 'csvButton',
-                margin: '10 0 5 20',
-                text: button3Txt,
-                handler: function() {
-                    gApp.exporter.exportCSV(gApp._nodeTree);
-                }
-            });
-        }
+            }
+        });
+    },
+
+    _findIdInTree: function(id) {
+        return _.find(gApp._nodeTree.descendants(), function(node) {
+            return node.data.record.data.FormattedID === id;
+        });
     },
 
     _fetchPredecessors: function(d) {
@@ -444,12 +554,12 @@ CARD_DISPLAY_FIELD_LIST:
                 fetch: true,
                 callback: function (records, operation, success) {
                     if (success) {
-                        var i = gApp._findNodeByRef(d.data.record.data._ref);
+                        var i = gApp._findIdInTree(d.data.record.data.FormattedID);
                         var start = gApp.inoid(i);
                         var end = [0,0];    //If record is not found, draw a line to the centre.
 
                         _.each(records, function(record){
-                            var j = gApp._findNodeByRef(record.data._ref);
+                            var j = gApp._findIdInTree(record.data.FormattedID);
                             if ( j ) {  // Record is in those selected
                                 end = gApp.inoid(j);
                             }
@@ -595,7 +705,7 @@ CARD_DISPLAY_FIELD_LIST:
         //Might want to change this...
         gApp._nodeTree.sum( function(d) {
             var retval = 0;
-            if (d.record.data.FormattedID) {
+            if (d.record.data._ref) {
                 if (d.record.isPortfolioItem()){
                     if ( gApp.getSetting('usePreliminaryEstimate')){
                         retval = d.record.get('PreliminaryEstimateValue');
@@ -676,19 +786,6 @@ CARD_DISPLAY_FIELD_LIST:
                     return "translate(" + arc.centroid(d) + ") rotate(" + (angle < Math.PI ? angle - Math.PI / 2 : angle + Math.PI / 2) * 180 / Math.PI + ")"; })
                 .text(function(d) { return d.data.Name; });
         }
-
-        d3.selectAll("input").on("change", function change() {
-            var value = this.value === "count" ?
-                 function() { return 1; } :
-                 function(d) { return d.value; };
-
-            path
-                .data(partition.value(value).nodes)
-            .transition()
-                .duration(1500)
-                .attr("d", gApp.arcTween);
-
-        });
 
         // Stash the old values for transition.
     },
@@ -1102,10 +1199,7 @@ CARD_DISPLAY_FIELD_LIST:
     },
 
     _findNodeByRef: function(ref) {
-        var found = d3.selectAll('path').filter(function(d) { 
-            return d && (d.data.record.data._ref === ref);
-        });
-        return found.empty() ? 0 : found.data()[0];    //Hope to god there is only one found....
+        return _.find(gApp._nodes, function(node) { return node.record.data._ref === ref;}) //Hope to god there is only one found....
     },
 
     _findParentType: function(record) {
@@ -1128,7 +1222,7 @@ CARD_DISPLAY_FIELD_LIST:
     },
     _findNodeById: function(nodes, id) {
         return _.find(nodes, function(node) {
-            return node.record.data._ref === id;
+            return node.record.data.FormattedID === id;
         });
     },
         //Routines to manipulate the types
@@ -1168,7 +1262,7 @@ CARD_DISPLAY_FIELD_LIST:
 
     _findParentNode: function(nodes, child){
         var record = child.record;
-        if (record.data._ref === 'root') return null;
+        if (record.data.FormattedID === 'R0') return null;
 
         //Nicely inconsistent in that the 'field' representing a parent of a user story has the name the same as the type
         // of the first level of the type hierarchy.
@@ -1178,7 +1272,7 @@ CARD_DISPLAY_FIELD_LIST:
         if (parent ){
             //Check if parent already in the node list. If so, make this one a child of that one
             //Will return a parent, or null if not found
-            pParent = gApp._findNodeById(nodes, parent._ref);
+            pParent = gApp._findNodeByRef( parent._ref);
         }
         else {
             //Here, there is no parent set, so attach to the 'null' parent.
@@ -1187,23 +1281,23 @@ CARD_DISPLAY_FIELD_LIST:
             //If we have a parent type, we will try to return the null parent for this type.
             if (pt) {
                 var parentName = '/' + pt + '/null';
-                pParent = gApp._findNodeById(nodes, parentName);
+                pParent = gApp._findNodeByRef(parentName);
             }
         }
         //If the record is a type at the top level, then we must return something to indicate 'root'
-        return pParent?pParent: gApp._findNodeById(nodes, 'root');
+        return pParent?pParent: gApp._findNodeById(nodes, 'R0');
     },
 
     _createTree: function (nodes) {
         //Try to use d3.stratify to create nodet
         var nodetree = d3.stratify()
                     .id( function(d) {
-                        var retval = (d.record && d.record.data._ref) || null; //No record is an error in the code, try to barf somewhere if that is the case
+                        var retval = (d.record && d.record.data.FormattedID) || null; //No record is an error in the code, try to barf somewhere if that is the case
                         return retval;
                     })
                     .parentId( function(d) {
                         var pParent = gApp._findParentNode(nodes, d);
-                        return (pParent && pParent.record && pParent.record.data._ref); })
+                        return (pParent && pParent.record && pParent.record.data.FormattedID); })
                     (nodes);
         return nodetree;
     },
@@ -1814,7 +1908,7 @@ _objectFromYearFirstDate: function (dateArray) {
             yAxis: [
                 {
                     title: {
-                        text: "Count"
+                        text: "Points"
                     }
                 }
             ],
@@ -18882,14 +18976,14 @@ Object.defineProperty(exports, '__esModule', { value: true });
 
         while (item.depth > level) {
             parent = parent.parent;
-            smallString += ","
+            smallString += ",";
             level +=1;
         }
         if (item.depth > 0) {
             smallString += item.data.record.get("FormattedID");
             level = parent.height - item.depth;
             while (level > 0) { 
-                smallString += ","
+                smallString += ",";
                 level -=1;
             }
             console.log(smallString);
