@@ -173,6 +173,7 @@ CARD_DISPLAY_FIELD_LIST:
         this.on('redrawTree', this._resetTimer);
         // this.on('drawChildren', this._drawChildren);
         this.timer = setTimeout(this._redrawTree, 1000);
+        this.exporter = Ext.create("TreeExporter");
 
     },
 
@@ -206,11 +207,11 @@ CARD_DISPLAY_FIELD_LIST:
        //Get all the nodes and the "Unknown" parent virtual nodes
        var nodetree = gApp._createTree(gApp._nodes);
        gApp._nodeTree = nodetree;
-        var viewBoxSize = [ 800,800 ];  //It's a circle, so can be the same in both directions!
+        var viewBoxSize = [ 1200,800 ];
         gApp._setViewBox(viewBoxSize);
 
         //Add a group for the tree of artefacts
-        d3.select('svg').append('g')
+        var t = d3.select('svg').append('g')
             .attr('id','tree')
             //Transform to the centre of the screen
             .attr("transform","translate(" + viewBoxSize[0]/2 + "," + viewBoxSize[1]/2 + ")");
@@ -379,11 +380,13 @@ CARD_DISPLAY_FIELD_LIST:
                         this.ticked = true;
                         d3.select("#colourLegend").attr("visibility","visible");
                         d3.select("#tree").attr("visibility", "hidden");
+                        d3.select("#depsOverlay").attr("visibility", "hidden");
                     } else {
                         this.setText(button1Txt);
                         this.ticked = false;
                         d3.select("#colourLegend").attr("visibility","hidden");
                         d3.select("#tree").attr("visibility", "visible");
+                        d3.select("#depsOverlay").attr("visibility", "visible");
                     }
                 }
             });
@@ -400,12 +403,26 @@ CARD_DISPLAY_FIELD_LIST:
                     if (this.ticked === false) {
                         this.setText('Hide Dependencies');
                         this.ticked = true;
+                        d3.select("#colourLegend").attr("visibility","hidden");
                         d3.select("#depsOverlay").attr("visibility","visible");
+                        d3.select("#tree").attr("visibility", "visible");
                     } else {
                         this.setText(button2Txt);
                         this.ticked = false;
                         d3.select("#depsOverlay").attr("visibility","hidden");
                     }
+                }
+            });
+        }
+        var button3Txt = "Export CSV";
+        if (!gApp.down('#csvButton')){
+            hdrBox.add({
+                xtype: 'rallybutton',
+                itemId: 'csvButton',
+                margin: '10 0 5 20',
+                text: button3Txt,
+                handler: function() {
+                    gApp.exporter.exportCSV(gApp._nodeTree);
                 }
             });
         }
@@ -428,10 +445,8 @@ CARD_DISPLAY_FIELD_LIST:
                                 end = gApp.inoid(j);
                             }
                             var inbetween = [(end[0] + start[0])/4,(end[1] + start[1])/4]
-                            console.log(start, inbetween, end);
                             var dOvl = d3.select("#depsOverlay");
                             dOvl.append('path')
-//                                .attr("d","M" + start + "A" + inbetween + ",0,0,0,"  + end + "A"+inbetween + ",0,0,1" + start + "z")
                                 .attr("d","M" + start + "Q" + inbetween + " "  + end + "Q" + inbetween + " " + start)
                                 .attr("class", "dependency");
                                 dOvl.append('circle')
@@ -551,7 +566,6 @@ CARD_DISPLAY_FIELD_LIST:
     },
 
     inoid: function(d) { 
-        debugger;
         var r = d.y0 + ((d.y1 - d.y0) / 10),
             a = (d.x0 + d.x1) / 2 - Math.PI / 2;
         return [Math.cos(a) * r, Math.sin(a) * r];
@@ -569,8 +583,6 @@ CARD_DISPLAY_FIELD_LIST:
             .innerRadius(function(d) { return d.y0; })
             .outerRadius(function(d) { return d.y1; });
 
-
-console.log(gApp._nodeTree);
         //Might want to change this...
         gApp._nodeTree.sum( function(d) {
             var retval = 0;

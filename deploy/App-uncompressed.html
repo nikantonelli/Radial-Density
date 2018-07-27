@@ -182,6 +182,7 @@ CARD_DISPLAY_FIELD_LIST:
         this.on('redrawTree', this._resetTimer);
         // this.on('drawChildren', this._drawChildren);
         this.timer = setTimeout(this._redrawTree, 1000);
+        this.exporter = Ext.create("TreeExporter");
 
     },
 
@@ -215,11 +216,11 @@ CARD_DISPLAY_FIELD_LIST:
        //Get all the nodes and the "Unknown" parent virtual nodes
        var nodetree = gApp._createTree(gApp._nodes);
        gApp._nodeTree = nodetree;
-        var viewBoxSize = [ 800,800 ];  //It's a circle, so can be the same in both directions!
+        var viewBoxSize = [ 1200,800 ];
         gApp._setViewBox(viewBoxSize);
 
         //Add a group for the tree of artefacts
-        d3.select('svg').append('g')
+        var t = d3.select('svg').append('g')
             .attr('id','tree')
             //Transform to the centre of the screen
             .attr("transform","translate(" + viewBoxSize[0]/2 + "," + viewBoxSize[1]/2 + ")");
@@ -388,11 +389,13 @@ CARD_DISPLAY_FIELD_LIST:
                         this.ticked = true;
                         d3.select("#colourLegend").attr("visibility","visible");
                         d3.select("#tree").attr("visibility", "hidden");
+                        d3.select("#depsOverlay").attr("visibility", "hidden");
                     } else {
                         this.setText(button1Txt);
                         this.ticked = false;
                         d3.select("#colourLegend").attr("visibility","hidden");
                         d3.select("#tree").attr("visibility", "visible");
+                        d3.select("#depsOverlay").attr("visibility", "visible");
                     }
                 }
             });
@@ -409,12 +412,26 @@ CARD_DISPLAY_FIELD_LIST:
                     if (this.ticked === false) {
                         this.setText('Hide Dependencies');
                         this.ticked = true;
+                        d3.select("#colourLegend").attr("visibility","hidden");
                         d3.select("#depsOverlay").attr("visibility","visible");
+                        d3.select("#tree").attr("visibility", "visible");
                     } else {
                         this.setText(button2Txt);
                         this.ticked = false;
                         d3.select("#depsOverlay").attr("visibility","hidden");
                     }
+                }
+            });
+        }
+        var button3Txt = "Export CSV";
+        if (!gApp.down('#csvButton')){
+            hdrBox.add({
+                xtype: 'rallybutton',
+                itemId: 'csvButton',
+                margin: '10 0 5 20',
+                text: button3Txt,
+                handler: function() {
+                    gApp.exporter.exportCSV(gApp._nodeTree);
                 }
             });
         }
@@ -437,10 +454,8 @@ CARD_DISPLAY_FIELD_LIST:
                                 end = gApp.inoid(j);
                             }
                             var inbetween = [(end[0] + start[0])/4,(end[1] + start[1])/4]
-                            console.log(start, inbetween, end);
                             var dOvl = d3.select("#depsOverlay");
                             dOvl.append('path')
-//                                .attr("d","M" + start + "A" + inbetween + ",0,0,0,"  + end + "A"+inbetween + ",0,0,1" + start + "z")
                                 .attr("d","M" + start + "Q" + inbetween + " "  + end + "Q" + inbetween + " " + start)
                                 .attr("class", "dependency");
                                 dOvl.append('circle')
@@ -560,7 +575,6 @@ CARD_DISPLAY_FIELD_LIST:
     },
 
     inoid: function(d) { 
-        debugger;
         var r = d.y0 + ((d.y1 - d.y0) / 10),
             a = (d.x0 + d.x1) / 2 - Math.PI / 2;
         return [Math.cos(a) * r, Math.sin(a) * r];
@@ -578,8 +592,6 @@ CARD_DISPLAY_FIELD_LIST:
             .innerRadius(function(d) { return d.y0; })
             .outerRadius(function(d) { return d.y1; });
 
-
-console.log(gApp._nodeTree);
         //Might want to change this...
         gApp._nodeTree.sum( function(d) {
             var retval = 0;
@@ -18757,6 +18769,160 @@ exports.zoomIdentity = identity$8;
 Object.defineProperty(exports, '__esModule', { value: true });
 
 })));
+                Ext.define("TreeExporter", {
+    //dateFormat : 'Y-m-d g:i',
+    dateFormat : 'Y-m-d',
+
+    inheritableStatics: {
+        XmlFileHeader: '<?xml version="1.0"?>',
+        XmlFileExtension: '.xml.txt'
+    },
+
+    _downloadFiles: function( files ) {
+        if ( files.length )
+        {
+            var data = files.pop();
+            var format = files.pop();
+            var file = files.pop();
+
+            var href = "<a href='" + format + "," + encodeURIComponent(data) + "' download='" + file + "'></a>";
+
+            var ml = Ext.DomHelper.insertAfter(window.document.getElementsByClassName('app')[0], href);
+            ml.click();
+//            ml.remove(); //Leaves them behind without this, but there is a timing issue: from click to remove.
+            this._downloadFiles(files);
+        }
+    },
+
+    exportCSV: function(tree) {
+        var data = this._getCSV(tree);
+        // fix: ' character was causing termination of csv file
+        data = data.replace(/\'/g, "");
+        this._downloadFiles(
+            [
+                'export.csv', 'data:text/csv;charset=utf8', data
+            ]
+        );
+
+    },
+
+    _XMLIndent: function(index, tag, leaf, data) {
+        var text = '\n';
+        for (var i = 0; i < index; i++) text += '\t';
+        text += '<' + tag + '>';
+        text += data;
+        if (!leaf) { text += '\n'; for (i = 0; i < index; i++) text += '\t';}
+        text += '</' + tag + '>';
+        return text;
+
+    },
+
+    _escapeForCSV: function(string) {
+        string = "" + string;
+        if (string.match(/,/)) {
+            if (!string.match(/"/)) {
+                string = '"' + string + '"';
+            } else {
+                string = string.replace(/,/g, ''); // comma's and quotes-- sorry, just lose the commas
+            }
+        }
+        return string;
+    },
+
+    _getFieldText: function(fieldData) {
+        var text;
+        if (fieldData === null || fieldData === undefined) {
+            text = '';
+
+        } else if (fieldData._refObjectName && !fieldData.getMonth) {
+            text = fieldData._refObjectName;
+
+        } else if (fieldData instanceof Date) {
+            text = Ext.Date.format(fieldData, this.dateFormat);
+
+        } /*else if (!fieldData.match) { // not a string or object we recognize...bank it out
+            text = '';
+        } */ else {
+            text = fieldData;
+        }
+
+        return text;
+    },
+
+    _getFieldTextAndEscape: function(fieldData) {
+        var string  = this._getFieldText(fieldData);
+
+        return this._escapeForCSV(string);
+    },
+
+    // have to add the colIdx to the count of locked columns
+    fixedColumnCount : function(columns) {
+        var cols = _.filter(columns,function(c) { 
+            return c!==undefined && c!==null && c.locked === true;
+        });
+        return cols.length;
+    },
+
+    traverseChildren: function(item) {
+
+        var me = this;
+        var bigString = '';
+        if (item.children) {
+            _.each(item.children, function(child) { bigString += me.traverseChildren(child);});
+        }
+
+        //If we come here, we are done going downwards
+        return me.stringifyItem(item) + bigString;
+    },
+
+    stringifyItem: function(item) {
+        var level = 1;
+        var smallString = '';
+        var parent = item.parent;
+
+        while (item.depth > level) {
+            parent = parent.parent;
+            smallString += ","
+            level +=1;
+        }
+        if (item.depth > 0) {
+            smallString += item.data.record.get("FormattedID");
+            level = parent.height - item.depth;
+            while (level > 0) { 
+                smallString += ","
+                level -=1;
+            }
+            console.log(smallString);
+            smallString += ',' + this._getFieldTextAndEscape(item.data.record.data.Name);
+
+            //Add more fields in here
+        }
+        return smallString + '\n';
+    },
+
+    _getCSV: function (tree) {
+        var hdrData    = [];
+        var textOut = '';
+        var valid = true;
+
+        var that = this;
+        if (!tree) return;  //If user clicks export before the tree is ready.....
+
+        //The 'tree' item is the root item. Get the fieldnames from the types
+        _.each(tree.descendants(), function(item) {
+            hdrData[item.depth] = item.data.record.data._type;
+        });
+        
+        var fieldnames = _.rest(hdrData).join(',') + ",Description" + "\n";
+        //Now we can start traversing the children
+        textOut = that.traverseChildren(tree) + textOut;
+       
+        if (textOut.length > 0)
+            return fieldnames + textOut;
+        else
+            return null;
+    }
+});
 
             Rally.launchApp('Rally.app.RadialDensity.app', {
                 name:"Density Map",
