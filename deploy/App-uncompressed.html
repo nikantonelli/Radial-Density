@@ -199,13 +199,13 @@ CARD_DISPLAY_FIELD_LIST:
     launch: function() {
         this.on('redrawTree', this._resetTimer);
         // this.on('drawChildren', this._drawChildren);
-        this.timer = setTimeout(this._redrawTree, 1000);
+        this.timer = setTimeout(this._redrawTree, 500);
         this.exporter = Ext.create("TreeExporter");
     },
 
     _resetTimer: function() {
         if ( this.timer) clearTimeout(this.timer);
-        this.timer = setTimeout(this._redrawTree, 1000);
+        this.timer = setTimeout(this._redrawTree, 500);
     },
     
     _redrawTree: function() {
@@ -309,14 +309,20 @@ CARD_DISPLAY_FIELD_LIST:
                                         gApp._typeStore = store;
                                         gApp._addFilterPanel();
                                         gApp._addColourHelper();
+                                        gApp._addButtons();
+                                        gApp.down('#piType').on ({
+                                            select: function() { 
+                                                gApp._kickOff();
+                                            }
+                                        });
                                     }
                                 }
                             },
-                            listeners: {
-                                select: function() { 
-                                    gApp._kickOff();
-                                }
-                            }
+                            // listeners: {
+                            //     select: function() { 
+                            //         gApp._kickOff();
+                            //     }
+                            // }
                         }
                     ]
                 },
@@ -427,7 +433,12 @@ CARD_DISPLAY_FIELD_LIST:
                     },
                 }
             });
+        }else {
+            gApp._loadStoreLocal();
         } 
+    },
+    _addButtons: function() {
+        var hdrBox = gApp.down('#headerBox');
 
         var button3Txt = "Export CSV";
         if (!gApp.down('#csvButton')){
@@ -563,17 +574,17 @@ CARD_DISPLAY_FIELD_LIST:
                             if ( j ) {  // Record is in those selected
                                 end = gApp.inoid(j);
                             }
-                            var inbetween = [(end[0] + start[0])/4,(end[1] + start[1])/4]
+                            var inbetween = [(end[0] + start[0])/4,(end[1] + start[1])/4];
                             var dOvl = d3.select("#depsOverlay");
                             dOvl.append('path')
                                 .attr("d","M" + start + "Q" + inbetween + " "  + end + "Q" + inbetween + " " + start)
                                 .attr("class", "dependency");
-                                dOvl.append('circle')
+                            dOvl.append('circle')
                                 .attr("r",4)
                                 .attr("cx", start[0])
                                 .attr("cy", start[1])
                                 .attr("class", "dependency");
-                                dOvl.append('circle')
+                            dOvl.append('circle')
                                 .attr("r",4)
                                 .attr("cx", end[0])
                                 .attr("cy", end[1])
@@ -1199,7 +1210,7 @@ CARD_DISPLAY_FIELD_LIST:
     },
 
     _findNodeByRef: function(ref) {
-        return _.find(gApp._nodes, function(node) { return node.record.data._ref === ref;}) //Hope to god there is only one found....
+        return _.find(gApp._nodes, function(node) { return node.record.data._ref === ref;}); //Hope to god there is only one found....
     },
 
     _findParentType: function(record) {

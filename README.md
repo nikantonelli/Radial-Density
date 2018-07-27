@@ -19,6 +19,8 @@ If you shift-CLICK on the segment, the app will give you the dependencies. If yo
 
 You can also opt for a dependencies overlay. It will highlight where there are predecessors. If the predecessor is not in the data set you have selected, the line goes to the centre.
 
+In the options, you can either get the app to give you an item selector (can choose multiple items) or use the advance filter panel on the node that you are in.
+
 ![alt text](https://github.com/nikantonelli/Radial-Density/blob/master/Images/overview.png)
 
 If you want to see problems with your data sanity, the segments can be made to go RED:
@@ -33,8 +35,12 @@ The data panel currently looks like this
 
 ![alt text](https://github.com/nikantonelli/Radial-Density/blob/master/Images/dataPanel.png)
 
-Dependenciy Overlay looks like this
+Dependency Overlay looks like this
 
 ![alt text](https://github.com/nikantonelli/Radial-Density/blob/master/Images/depsOverlay.png)
+
+Filter panel looks liek this
+
+![alt text](https://github.com/nikantonelli/Radial-Density/blob/master/Images/advFilters.png)
 
 CAVEAT: There are still bugs with the autoloading of the last state set by the user!
