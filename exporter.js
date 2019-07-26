@@ -135,14 +135,18 @@ Ext.define("TreeExporter", {
         var hdrData    = [];
         var textOut = '';
         var valid = true;
+        var fieldnames = '';
 
         var that = this;
         if (!tree) return;  //If user clicks export before the tree is ready.....
 
         //The 'tree' item is the root item. Get the fieldnames from the types
 //        this.descendantTypes = _.uniq( _.pluck(tree.descendants(), function(item) { return item.data.record.data._type}))
+        for ( i = 0; i < tree.height; i++ ) {
+            fieldnames += 'Tree Level ' + i;
+        }
         
-//        var fieldnames = _.rest(this.descendantTypes).join(',') + ",Description" + ", Attachments Count, Attachments Total" + "\n";
+        fieldnames += ",Description" + ", Attachments Count, Attachments Total" + "\n";
         //Now we can start traversing the children
         textOut = that.traverseChildren(tree) + textOut;
 

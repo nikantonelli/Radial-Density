@@ -1,19 +1,162 @@
 (function () {
     var Ext = window.Ext4 || window.Ext;
 
+    Ext.define('Ext.data.MyConnection', {
+    override: 'Ext.data.Connection',
+    mixins: {
+        observable:  Ext.util.Observable 
+    },
+    
+               
+                                  
+      
+
+    statics: {
+        requestId: 0
+    },
+
+    url: null,
+    async: false,
+    method: null,
+    username: '',
+    password: '',
+
+    
+    disableCaching: true,
+
+    
+    withCredentials: false,
+
+    
+    binary: false,
+
+    
+    cors: false,
+
+    isXdr: false,
+
+    defaultXdrContentType: 'text/plain',
+
+    
+    disableCachingParam: '_dc',
+
+    
+    timeout : 60000,
+
+    
+
+    
+
+    
+
+    
+
+    useDefaultHeader : true,
+    defaultPostHeader : 'application/x-www-form-urlencoded; charset=UTF-8',
+    useDefaultXhrHeader : true,
+    defaultXhrHeader : 'XMLHttpRequest',
+
+    constructor : function(config) {
+        config = config || {};
+        Ext.apply(this, config);
+
+        
+        
+        
+        this.requests = {};
+        this.mixins.observable.constructor.call(this);
+    },
+
+    
+    request : function(options) {
+        options = options || {};
+        var me = this,
+            scope = options.scope || window,
+            username = options.username || me.username,
+            password = options.password || me.password || '',
+            async,
+            requestOptions,
+            request,
+            headers,
+            xhr;
+        if (me.fireEvent('beforerequest', me, options) !== false) {
+
+            requestOptions = me.setOptions(options, scope);
+
+            if (me.isFormUpload(options)) {
+                me.upload(options.form, requestOptions.url, requestOptions.data, options);
+                return null;
+            }
+
+            
+            if (options.autoAbort || me.autoAbort) {
+                me.abort();
+            }
+
+            
+            async = options.async !== false ? (options.async || me.async) : false;
+            xhr = me.openRequest(options, requestOptions, async, username, password);
+
+            
+            if (!me.isXdr) {
+                headers = me.setupHeaders(xhr, options, requestOptions.data, requestOptions.params);
+            }
+
+            
+            request = {
+                id: ++Ext.data.Connection.requestId,
+                xhr: xhr,
+                headers: headers,
+                options: options,
+                async: async,
+                binary: options.binary || me.binary,
+                timeout: setTimeout(function() {
+                    request.timedout = true;
+                    me.abort(request);
+                }, options.timeout || me.timeout)
+            };
+
+            me.requests[request.id] = request;
+            me.latestId = request.id;
+            
+            if (async) {
+                if (!me.isXdr) {
+                    xhr.onreadystatechange = Ext.Function.bind(me.onStateChange, me, [request]);
+                }
+            }
+
+            if (me.isXdr) {
+                me.processXdrRequest(request, xhr);
+            }
+
+            
+            xhr.send(requestOptions.data);
+            if (!async) {
+                return me.onComplete(request);
+            }
+            return request;
+        } else {
+            Ext.callback(options.callback, options.scope, [options, undefined, undefined]);
+            return null;
+        }
+    },
+});
+
+
 Ext.define('Rally.app.RadialDensity.app', {
     extend: 'Rally.app.App',
     componentCls: 'app',
     config: {
         defaultSettings: {
-            includeStories: true,
-            includeDefects: true,
-            includeTasks: true,
+            includeStories: false,
+            includeDefects: false,
+            includeTasks: false,
+            includeTestCases: false,
             usePreliminaryEstimate: true,
             hideArchived: false,
             sizeStoriesByPlanEstimate: false,
             sortSize: false,
-            showLabels: true,
+            showLabels: false,
             validateData: false,
             flashDeps: false,
             showFilter: true,
@@ -61,12 +204,12 @@ Ext.define('Rally.app.RadialDensity.app', {
         'DisplayColor',
         'Owner',
         'Blocked',
-        'BlockedReason',
+//        'BlockedReason',
         'Ready',
-        'Tags',
+//        'Tags',
         'Workspace',
-        'RevisionHistory',
-        'CreationDate',
+//        'RevisionHistory',
+//        'CreationDate',
         'PercentDoneByStoryCount',
         'PercentDoneByStoryPlanEstimate',
         'PredecessorsAndSuccessors',
@@ -74,8 +217,8 @@ Ext.define('Rally.app.RadialDensity.app', {
         'ScheduleState',
         'PreliminaryEstimate',
         'PlanEstimate',
-        'Description',
-        'Notes',
+//        'Description',
+//        'Notes',
         'Predecessors',
         'Successors',
         'OrderIndex',   //Used to get the State field order index
@@ -87,10 +230,10 @@ Ext.define('Rally.app.RadialDensity.app', {
         //Customer specific after here. Delete as appropriate
 //        'c_ProjectIDOBN',
 //        'c_QRWP',
-        'c_ProgressUpdate',
-        'c_RAIDSeverityCriticality',
-        'c_RISKProbabilityLevel',
-        'c_RAIDRequestStatus'   
+//        'c_ProgressUpdate',
+//        'c_RAIDSeverityCriticality',
+//        'c_RISKProbabilityLevel',
+//        'c_RAIDRequestStatus'   
     ],
 CARD_DISPLAY_FIELD_LIST:
     [
@@ -158,6 +301,12 @@ CARD_DISPLAY_FIELD_LIST:
                 labelALign: 'middle'
             },
             {
+                name: 'includeTestCases',
+                xtype: 'rallycheckboxfield',
+                fieldLabel: 'Include TestCases',
+                labelALign: 'middle'
+            },
+            {
                 name: 'validateData',
                 xtype: 'rallycheckboxfield',
                 fieldLabel: 'Check Data Sanity',
@@ -220,7 +369,6 @@ CARD_DISPLAY_FIELD_LIST:
     },
 
     _resetTimer: function() {
-        gApp.setLoading("Loading artefacts..")
         if ( this.timer) clearTimeout(this.timer);
         this.timer = setTimeout(this._redrawTree, 500);
     },
@@ -693,10 +841,10 @@ CARD_DISPLAY_FIELD_LIST:
     },
     
     _getArtifacts: function(data) {
+        gApp.setLoading("Loading artefacts..");
+
         //On re-entry send an event to redraw
-
         gApp._nodes = gApp._nodes.concat( gApp._createNodes(data));    //Add what we started with to the node list
-
         this.fireEvent('redrawTree');
         //Starting with highest selected by the combobox, go down
 
@@ -763,6 +911,10 @@ CARD_DISPLAY_FIELD_LIST:
                 if (gApp.getSetting('includeTasks') && parent.hasField('Tasks')) {  
                     collectionConfig.fetch.push('WorkProduct'); //Add the User Story not the Test Case
                     parent.getCollection( 'Tasks').load( Ext.clone(collectionConfig) );
+                } 
+                if (gApp.getSetting('includeTestCases') && parent.hasField('TestCases')) {  
+                    collectionConfig.fetch.push('WorkProduct'); //Add the User Story not the Test Case
+                    parent.getCollection( 'TestCases').load( Ext.clone(collectionConfig) );
                 } 
                 // //If we are userstories, then we need to fetch tasks
                 // else if (parent.hasField('Tasks') && (gApp.getSetting('includeStories'))){
@@ -1391,6 +1543,9 @@ CARD_DISPLAY_FIELD_LIST:
         }
         else if (record.isDefect()) {
             parent = record.data.Requirement;
+        }
+        else if (record.isTestCase()) {
+            parent = record.data.WorkProduct;
         }
         var pParent = null;
         if (parent ){
