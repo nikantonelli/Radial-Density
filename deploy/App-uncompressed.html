@@ -24,7 +24,10 @@ Ext.define('Rally.app.RadialDensity.app', {
             validateData: false,
             flashDeps: false,
             showFilter: true,
-            colourScheme: 'RdPu'
+            //colourScheme:   'Spectral',
+            //colourScheme:   'YlOrRd', 
+            colourScheme:   'RdPu',
+            fetchAttachments: true
         }
     },
 
@@ -54,6 +57,7 @@ Ext.define('Rally.app.RadialDensity.app', {
     TITLE_NAME_LENGTH: 80,
     STORE_FETCH_FIELD_LIST:
     [
+        'Attachments',
         'Name',
         'FormattedID',
         'Parent',
@@ -97,6 +101,7 @@ Ext.define('Rally.app.RadialDensity.app', {
     ],
 CARD_DISPLAY_FIELD_LIST:
     [
+        'Attachments',
         'Name',
         'Owner',
         'PreliminaryEstimate',
@@ -188,6 +193,12 @@ CARD_DISPLAY_FIELD_LIST:
                 fieldLabel: 'Show Advanced filter',
                 name: 'showFilter',
                 labelAlign: 'middle'
+            },
+            {
+                xtype: 'rallycheckboxfield',
+                fieldLabel: 'Show Attachment Summary',
+                name: 'fetchAttachments',
+                labelAlign: 'middle'
             }
             
         ];
@@ -197,9 +208,9 @@ CARD_DISPLAY_FIELD_LIST:
     timer: null,
 
     launch: function() {
-        this.on('redrawTree', this._resetTimer);
-        // this.on('drawChildren', this._drawChildren);
-        this.timer = setTimeout(this._redrawTree, 500);
+        this.on({
+            redrawTree: { fn: this._resetTimer, scope: this, buffer: 500}
+        });
         this.exporter = Ext.create("TreeExporter");
     },
 
@@ -607,6 +618,37 @@ CARD_DISPLAY_FIELD_LIST:
     _processSuccessors: function(d) {
 
     },
+
+    _getAttachments: function(records) {
+        _.each(records, function(record) {
+            var node = gApp._findNodeByRef(record.get('_ref'));
+//            debugger;
+            if (record.get('Attachments').Count >0){
+                var collectionConfig = {
+                    fetch: ['Size','Type'],
+                    callback: function(records, operation, s) {
+                        if (s) {
+                            if (records && records.length) {
+                                if (node) {
+                                    node.Attachments = {};
+                                    node.Attachments.Count = records.length;
+                                    node.Attachments.TotalSize = 
+                                        _.reduce(
+                                            _.pluck(records, function(record) {
+                                                return record.get('Size');
+                                            }),
+                                            function(sum, num) { return sum + num;}
+                                        );
+                                    }
+                                    console.log('Added attachments: ', node);
+                                }
+                        }
+                    }
+                };
+                record.getCollection('Attachments').load(collectionConfig);
+            }
+        });
+    },
     
     _getArtifacts: function(data) {
         //On re-entry send an event to redraw
@@ -628,7 +670,12 @@ CARD_DISPLAY_FIELD_LIST:
                     fetch: gApp.STORE_FETCH_FIELD_LIST,
                     callback: function(records, operation, success) {
                         //Start the recursive trawl down through the levels
-                        if (records.length)  gApp._getArtifacts(records);
+                        if (records.length)  {
+                            gApp._getArtifacts(records);
+                            if (gApp.getSetting('fetchAttachments') === true) {
+                                gApp._getAttachments(records);
+                            }
+                        }
                     }
                 };
                 if (gApp.getSetting('hideArchived')) {
@@ -651,12 +698,14 @@ CARD_DISPLAY_FIELD_LIST:
                     callback: function(records, operation, s) {
                         if (s) {
                             if (records && records.length) {
-
                                 //At this point, we need to decide whether we are adding nodes to the main tree
                                 if (gApp.getSetting('includeStories')){
                                     gApp._nodes = gApp._nodes.concat( gApp._createNodes(records));
                                     gApp.fireEvent('redrawTree');
                                 } 
+                                if (gApp.getSetting('fetchAttachments') === true) {
+                                    gApp._getAttachments(records);
+                                }    
                             }
                         }
                     }
@@ -1310,6 +1359,17 @@ CARD_DISPLAY_FIELD_LIST:
                         var pParent = gApp._findParentNode(nodes, d);
                         return (pParent && pParent.record && pParent.record.data.FormattedID); })
                     (nodes);
+
+        nodetree.sum( function(d) { return d.Attachments? d.Attachments.TotalSize : 0 });
+        nodetree.each( function(d) { 
+            d.ChildAttachments = {};
+            d.ChildAttachments.Size = d.value;
+        });
+        nodetree.sum( function(d) { return d.Attachments? d.Attachments.Count : 0 });
+        nodetree.each( function(d) { 
+            d.ChildAttachments.Count = d.value;
+        });
+                    console.log("Created Tree: ", nodetree);
         return nodetree;
     },
 
@@ -19385,6 +19445,258 @@ Object.defineProperty(exports, '__esModule', { value: true });
 }
 .RdPu8-9 {
   fill: #49006a;
+}
+.YlOrRd0-3 {
+  fill: #ffeda0;
+}
+.YlOrRd1-3 {
+  fill: #feb24c;
+}
+.YlOrRd2-3 {
+  fill: #f03b20;
+}
+.YlOrRd0-4 {
+  fill: #ffffb2;
+}
+.YlOrRd1-4 {
+  fill: #fecc5c;
+}
+.YlOrRd2-4 {
+  fill: #fd8d3c;
+}
+.YlOrRd3-4 {
+  fill: #e31a1c;
+}
+.YlOrRd0-5 {
+  fill: #ffffb2;
+}
+.YlOrRd1-5 {
+  fill: #fecc5c;
+}
+.YlOrRd2-5 {
+  fill: #fd8d3c;
+}
+.YlOrRd3-5 {
+  fill: #f03b20;
+}
+.YlOrRd4-5 {
+  fill: #bd0026;
+}
+.YlOrRd0-6 {
+  fill: #ffffb2;
+}
+.YlOrRd1-6 {
+  fill: #fed976;
+}
+.YlOrRd2-6 {
+  fill: #feb24c;
+}
+.YlOrRd3-6 {
+  fill: #fd8d3c;
+}
+.YlOrRd4-6 {
+  fill: #f03b20;
+}
+.YlOrRd5-6 {
+  fill: #bd0026;
+}
+.YlOrRd0-7 {
+  fill: #ffffb2;
+}
+.YlOrRd1-7 {
+  fill: #fed976;
+}
+.YlOrRd2-7 {
+  fill: #feb24c;
+}
+.YlOrRd3-7 {
+  fill: #fd8d3c;
+}
+.YlOrRd4-7 {
+  fill: #fc4e2a;
+}
+.YlOrRd5-7 {
+  fill: #e31a1c;
+}
+.YlOrRd6-7 {
+  fill: #b10026;
+}
+.YlOrRd0-8 {
+  fill: #ffffcc;
+}
+.YlOrRd1-8 {
+  fill: #ffeda0;
+}
+.YlOrRd2-8 {
+  fill: #fed976;
+}
+.YlOrRd3-8 {
+  fill: #feb24c;
+}
+.YlOrRd4-8 {
+  fill: #fd8d3c;
+}
+.YlOrRd5-8 {
+  fill: #fc4e2a;
+}
+.YlOrRd6-8 {
+  fill: #e31a1c;
+}
+.YlOrRd7-8 {
+  fill: #b10026;
+}
+.YlOrRd0-9 {
+  fill: #ffffcc;
+}
+.YlOrRd1-9 {
+  fill: #ffeda0;
+}
+.YlOrRd2-9 {
+  fill: #fed976;
+}
+.YlOrRd3-9 {
+  fill: #feb24c;
+}
+.YlOrRd4-9 {
+  fill: #fd8d3c;
+}
+.YlOrRd5-9 {
+  fill: #fc4e2a;
+}
+.YlOrRd6-9 {
+  fill: #e31a1c;
+}
+.YlOrRd7-9 {
+  fill: #bd0026;
+}
+.YlOrRd8-9 {
+  fill: #800026;
+}
+.Spectral0-3 {
+  fill: #fc8d59;
+}
+.Spectral1-3 {
+  fill: #ffffbf;
+}
+.Spectral2-3 {
+  fill: #99d594;
+}
+.Spectral0-4 {
+  fill: #d7191c;
+}
+.Spectral1-4 {
+  fill: #fdae61;
+}
+.Spectral2-4 {
+  fill: #abdda4;
+}
+.Spectral3-4 {
+  fill: #2b83ba;
+}
+.Spectral0-5 {
+  fill: #d7191c;
+}
+.Spectral1-5 {
+  fill: #fdae61;
+}
+.Spectral2-5 {
+  fill: #ffffbf;
+}
+.Spectral3-5 {
+  fill: #abdda4;
+}
+.Spectral4-5 {
+  fill: #2b83ba;
+}
+.Spectral0-6 {
+  fill: #d53e4f;
+}
+.Spectral1-6 {
+  fill: #fc8d59;
+}
+.Spectral2-6 {
+  fill: #fee08b;
+}
+.Spectral3-6 {
+  fill: #e6f598;
+}
+.Spectral4-6 {
+  fill: #99d594;
+}
+.Spectral5-6 {
+  fill: #3288bd;
+}
+.Spectral0-7 {
+  fill: #d53e4f;
+}
+.Spectral1-7 {
+  fill: #fc8d59;
+}
+.Spectral2-7 {
+  fill: #fee08b;
+}
+.Spectral3-7 {
+  fill: #ffffbf;
+}
+.Spectral4-7 {
+  fill: #e6f598;
+}
+.Spectral5-7 {
+  fill: #99d594;
+}
+.Spectral6-7 {
+  fill: #3288bd;
+}
+.Spectral0-8 {
+  fill: #d53e4f;
+}
+.Spectral1-8 {
+  fill: #f46d43;
+}
+.Spectral2-8 {
+  fill: #fdae61;
+}
+.Spectral3-8 {
+  fill: #fee08b;
+}
+.Spectral4-8 {
+  fill: #e6f598;
+}
+.Spectral5-8 {
+  fill: #abdda4;
+}
+.Spectral6-8 {
+  fill: #66c2a5;
+}
+.Spectral7-8 {
+  fill: #3288bd;
+}
+.Spectral0-9 {
+  fill: #d53e4f;
+}
+.Spectral1-9 {
+  fill: #f46d43;
+}
+.Spectral2-9 {
+  fill: #fdae61;
+}
+.Spectral3-9 {
+  fill: #fee08b;
+}
+.Spectral4-9 {
+  fill: #ffffbf;
+}
+.Spectral5-9 {
+  fill: #e6f598;
+}
+.Spectral6-9 {
+  fill: #abdda4;
+}
+.Spectral7-9 {
+  fill: #66c2a5;
+}
+.Spectral8-9 {
+  fill: #3288bd;
 }
 
     </style>

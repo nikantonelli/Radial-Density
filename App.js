@@ -15,7 +15,10 @@ Ext.define('Rally.app.RadialDensity.app', {
             validateData: false,
             flashDeps: false,
             showFilter: true,
-            colourScheme: 'RdPu'
+            //colourScheme:   'Spectral',
+            //colourScheme:   'YlOrRd', 
+            colourScheme:   'RdPu',
+            fetchAttachments: true
         }
     },
 
@@ -45,6 +48,7 @@ Ext.define('Rally.app.RadialDensity.app', {
     TITLE_NAME_LENGTH: 80,
     STORE_FETCH_FIELD_LIST:
     [
+        'Attachments',
         'Name',
         'FormattedID',
         'Parent',
@@ -88,6 +92,7 @@ Ext.define('Rally.app.RadialDensity.app', {
     ],
 CARD_DISPLAY_FIELD_LIST:
     [
+        'Attachments',
         'Name',
         'Owner',
         'PreliminaryEstimate',
@@ -179,6 +184,12 @@ CARD_DISPLAY_FIELD_LIST:
                 fieldLabel: 'Show Advanced filter',
                 name: 'showFilter',
                 labelAlign: 'middle'
+            },
+            {
+                xtype: 'rallycheckboxfield',
+                fieldLabel: 'Show Attachment Summary',
+                name: 'fetchAttachments',
+                labelAlign: 'middle'
             }
             
         ];
@@ -188,9 +199,9 @@ CARD_DISPLAY_FIELD_LIST:
     timer: null,
 
     launch: function() {
-        this.on('redrawTree', this._resetTimer);
-        // this.on('drawChildren', this._drawChildren);
-        this.timer = setTimeout(this._redrawTree, 500);
+        this.on({
+            redrawTree: { fn: this._resetTimer, scope: this, buffer: 500}
+        });
         this.exporter = Ext.create("TreeExporter");
     },
 
@@ -598,6 +609,37 @@ CARD_DISPLAY_FIELD_LIST:
     _processSuccessors: function(d) {
 
     },
+
+    _getAttachments: function(records) {
+        _.each(records, function(record) {
+            var node = gApp._findNodeByRef(record.get('_ref'));
+//            debugger;
+            if (record.get('Attachments').Count >0){
+                var collectionConfig = {
+                    fetch: ['Size','Type'],
+                    callback: function(records, operation, s) {
+                        if (s) {
+                            if (records && records.length) {
+                                if (node) {
+                                    node.Attachments = {};
+                                    node.Attachments.Count = records.length;
+                                    node.Attachments.TotalSize = 
+                                        _.reduce(
+                                            _.pluck(records, function(record) {
+                                                return record.get('Size');
+                                            }),
+                                            function(sum, num) { return sum + num;}
+                                        );
+                                    }
+                                    console.log('Added attachments: ', node);
+                                }
+                        }
+                    }
+                };
+                record.getCollection('Attachments').load(collectionConfig);
+            }
+        });
+    },
     
     _getArtifacts: function(data) {
         //On re-entry send an event to redraw
@@ -619,7 +661,12 @@ CARD_DISPLAY_FIELD_LIST:
                     fetch: gApp.STORE_FETCH_FIELD_LIST,
                     callback: function(records, operation, success) {
                         //Start the recursive trawl down through the levels
-                        if (records.length)  gApp._getArtifacts(records);
+                        if (records.length)  {
+                            gApp._getArtifacts(records);
+                            if (gApp.getSetting('fetchAttachments') === true) {
+                                gApp._getAttachments(records);
+                            }
+                        }
                     }
                 };
                 if (gApp.getSetting('hideArchived')) {
@@ -642,12 +689,14 @@ CARD_DISPLAY_FIELD_LIST:
                     callback: function(records, operation, s) {
                         if (s) {
                             if (records && records.length) {
-
                                 //At this point, we need to decide whether we are adding nodes to the main tree
                                 if (gApp.getSetting('includeStories')){
                                     gApp._nodes = gApp._nodes.concat( gApp._createNodes(records));
                                     gApp.fireEvent('redrawTree');
                                 } 
+                                if (gApp.getSetting('fetchAttachments') === true) {
+                                    gApp._getAttachments(records);
+                                }    
                             }
                         }
                     }
@@ -1301,6 +1350,17 @@ CARD_DISPLAY_FIELD_LIST:
                         var pParent = gApp._findParentNode(nodes, d);
                         return (pParent && pParent.record && pParent.record.data.FormattedID); })
                     (nodes);
+
+        nodetree.sum( function(d) { return d.Attachments? d.Attachments.TotalSize : 0; });
+        nodetree.each( function(d) { 
+            d.ChildAttachments = {};
+            d.ChildAttachments.Size = d.value;
+        });
+        nodetree.sum( function(d) { return d.Attachments? d.Attachments.Count : 0; });
+        nodetree.each( function(d) { 
+            d.ChildAttachments.Count = d.value;
+        });
+                    console.log("Created Tree: ", nodetree);
         return nodetree;
     },
 

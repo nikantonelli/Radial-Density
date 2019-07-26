@@ -115,3 +115,19 @@
  .RdPu0-7{fill:rgb(254,235,226)} .RdPu1-7{fill:rgb(252,197,192)} .RdPu2-7{fill:rgb(250,159,181)} .RdPu3-7{fill:rgb(247,104,161)} .RdPu4-7{fill:rgb(221,52,151)} .RdPu5-7{fill:rgb(174,1,126)} .RdPu6-7{fill:rgb(122,1,119)}
  .RdPu0-8{fill:rgb(255,247,243)} .RdPu1-8{fill:rgb(253,224,221)} .RdPu2-8{fill:rgb(252,197,192)} .RdPu3-8{fill:rgb(250,159,181)} .RdPu4-8{fill:rgb(247,104,161)} .RdPu5-8{fill:rgb(221,52,151)} .RdPu6-8{fill:rgb(174,1,126)} .RdPu7-8{fill:rgb(122,1,119)}
  .RdPu0-9{fill:rgb(255,247,243)} .RdPu1-9{fill:rgb(253,224,221)} .RdPu2-9{fill:rgb(252,197,192)} .RdPu3-9{fill:rgb(250,159,181)} .RdPu4-9{fill:rgb(247,104,161)} .RdPu5-9{fill:rgb(221,52,151)} .RdPu6-9{fill:rgb(174,1,126)} .RdPu7-9{fill:rgb(122,1,119)} .RdPu8-9{fill:rgb(73,0,106)}
+
+ .YlOrRd0-3{fill:rgb(255,237,160)} .YlOrRd1-3{fill:rgb(254,178,76)} .YlOrRd2-3{fill:rgb(240,59,32)}
+ .YlOrRd0-4{fill:rgb(255,255,178)} .YlOrRd1-4{fill:rgb(254,204,92)} .YlOrRd2-4{fill:rgb(253,141,60)} .YlOrRd3-4{fill:rgb(227,26,28)}
+ .YlOrRd0-5{fill:rgb(255,255,178)} .YlOrRd1-5{fill:rgb(254,204,92)} .YlOrRd2-5{fill:rgb(253,141,60)} .YlOrRd3-5{fill:rgb(240,59,32)} .YlOrRd4-5{fill:rgb(189,0,38)}
+ .YlOrRd0-6{fill:rgb(255,255,178)} .YlOrRd1-6{fill:rgb(254,217,118)} .YlOrRd2-6{fill:rgb(254,178,76)} .YlOrRd3-6{fill:rgb(253,141,60)} .YlOrRd4-6{fill:rgb(240,59,32)} .YlOrRd5-6{fill:rgb(189,0,38)}
+ .YlOrRd0-7{fill:rgb(255,255,178)} .YlOrRd1-7{fill:rgb(254,217,118)} .YlOrRd2-7{fill:rgb(254,178,76)} .YlOrRd3-7{fill:rgb(253,141,60)} .YlOrRd4-7{fill:rgb(252,78,42)} .YlOrRd5-7{fill:rgb(227,26,28)} .YlOrRd6-7{fill:rgb(177,0,38)}
+ .YlOrRd0-8{fill:rgb(255,255,204)} .YlOrRd1-8{fill:rgb(255,237,160)} .YlOrRd2-8{fill:rgb(254,217,118)} .YlOrRd3-8{fill:rgb(254,178,76)} .YlOrRd4-8{fill:rgb(253,141,60)} .YlOrRd5-8{fill:rgb(252,78,42)} .YlOrRd6-8{fill:rgb(227,26,28)} .YlOrRd7-8{fill:rgb(177,0,38)}
+ .YlOrRd0-9{fill:rgb(255,255,204)} .YlOrRd1-9{fill:rgb(255,237,160)} .YlOrRd2-9{fill:rgb(254,217,118)} .YlOrRd3-9{fill:rgb(254,178,76)} .YlOrRd4-9{fill:rgb(253,141,60)} .YlOrRd5-9{fill:rgb(252,78,42)} .YlOrRd6-9{fill:rgb(227,26,28)} .YlOrRd7-9{fill:rgb(189,0,38)} .YlOrRd8-9{fill:rgb(128,0,38)}
+
+ .Spectral0-3{fill:rgb(252,141,89)} .Spectral1-3{fill:rgb(255,255,191)} .Spectral2-3{fill:rgb(153,213,148)}
+ .Spectral0-4{fill:rgb(215,25,28)} .Spectral1-4{fill:rgb(253,174,97)} .Spectral2-4{fill:rgb(171,221,164)} .Spectral3-4{fill:rgb(43,131,186)}
+ .Spectral0-5{fill:rgb(215,25,28)} .Spectral1-5{fill:rgb(253,174,97)} .Spectral2-5{fill:rgb(255,255,191)} .Spectral3-5{fill:rgb(171,221,164)} .Spectral4-5{fill:rgb(43,131,186)}
+ .Spectral0-6{fill:rgb(213,62,79)} .Spectral1-6{fill:rgb(252,141,89)} .Spectral2-6{fill:rgb(254,224,139)} .Spectral3-6{fill:rgb(230,245,152)} .Spectral4-6{fill:rgb(153,213,148)} .Spectral5-6{fill:rgb(50,136,189)}
+ .Spectral0-7{fill:rgb(213,62,79)} .Spectral1-7{fill:rgb(252,141,89)} .Spectral2-7{fill:rgb(254,224,139)} .Spectral3-7{fill:rgb(255,255,191)} .Spectral4-7{fill:rgb(230,245,152)} .Spectral5-7{fill:rgb(153,213,148)} .Spectral6-7{fill:rgb(50,136,189)}
+ .Spectral0-8{fill:rgb(213,62,79)} .Spectral1-8{fill:rgb(244,109,67)} .Spectral2-8{fill:rgb(253,174,97)} .Spectral3-8{fill:rgb(254,224,139)} .Spectral4-8{fill:rgb(230,245,152)} .Spectral5-8{fill:rgb(171,221,164)} .Spectral6-8{fill:rgb(102,194,165)} .Spectral7-8{fill:rgb(50,136,189)}
+ .Spectral0-9{fill:rgb(213,62,79)} .Spectral1-9{fill:rgb(244,109,67)} .Spectral2-9{fill:rgb(253,174,97)} .Spectral3-9{fill:rgb(254,224,139)} .Spectral4-9{fill:rgb(255,255,191)} .Spectral5-9{fill:rgb(230,245,152)} .Spectral6-9{fill:rgb(171,221,164)} .Spectral7-9{fill:rgb(102,194,165)} .Spectral8-9{fill:rgb(50,136,189)}
