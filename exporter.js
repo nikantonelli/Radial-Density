@@ -121,10 +121,13 @@ Ext.define("TreeExporter", {
                 smallString += ",";
                 level -=1;
             }
-            console.log(smallString);
             smallString += ',' + this._getFieldTextAndEscape(item.data.record.data.Name);
 
             //Add more fields in here
+            smallString += ',' + (item.data.Attachments?item.data.Attachments.Size:'');
+            smallString += ',' + (item.data.Attachments?item.data.Attachments.Count:'');
+            smallString += ',' + item.ChildAttachments.Size;
+            console.log(smallString);
         }
         return smallString + '\n';
     },
@@ -142,10 +145,17 @@ Ext.define("TreeExporter", {
             hdrData[item.depth] = item.data.record.data._type;
         });
         
-        var fieldnames = _.rest(hdrData).join(',') + ",Description" + "\n";
+        var fieldnames = _.rest(hdrData).join(',') + ",Description" + ",Attachments Size, Attachments Count, Attachments Total" + "\n";
         //Now we can start traversing the children
         textOut = that.traverseChildren(tree) + textOut;
-       
+
+        if (tree.ChildAttachments.Count > 0) {
+            for ( i = 0; i < fieldnames.split(',').length - 3; i++){
+                textOut += ',';
+            }
+            textOut += "Total Attachments Size";
+            textOut += "," + tree.ChildAttachments.Count + ',' + tree.ChildAttachments.Size + '\n';
+        }
         if (textOut.length > 0)
             return fieldnames + textOut;
         else

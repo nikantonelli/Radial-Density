@@ -502,6 +502,32 @@ CARD_DISPLAY_FIELD_LIST:
                 }
             });
         }
+        var button0Txt = "Attachment Summary";
+        if (!gApp.down('#attachmentSummary')){
+            hdrBox.insert(1,{
+                xtype: 'rallybutton',
+                itemId: 'attachmentSummary',
+                margin: '10 0 5 20',
+                ticked: false,
+                text: button0Txt,
+                handler: function() {
+                    var depsOverlay = d3.select("#depsOverlay").attr("visibility");
+                    if (this.ticked === false) {
+                        this.setText('Return');
+                        this.ticked = true;
+                        d3.select("#attachments").attr("visibility","visible");
+                        d3.select("#tree").attr("visibility", "hidden");
+                        d3.select("#depsOverlay").attr("visibility", "hidden");
+                    } else {
+                        this.setText(button0Txt);
+                        this.ticked = false;
+                        d3.select("#attachments").attr("visibility","hidden");
+                        d3.select("#tree").attr("visibility", "visible");
+                        d3.select("#depsOverlay").attr("visibility", depsOverlay);
+                    }
+                }
+            });
+        }
     },
 
     _addFilterPanel: function() {
@@ -623,7 +649,7 @@ CARD_DISPLAY_FIELD_LIST:
                                 if (node) {
                                     node.Attachments = {};
                                     node.Attachments.Count = records.length;
-                                    node.Attachments.TotalSize = 
+                                    node.Attachments.Size = 
                                         _.reduce(
                                             _.pluck(records, function(record) {
                                                 return record.get('Size');
@@ -1351,7 +1377,7 @@ CARD_DISPLAY_FIELD_LIST:
                         return (pParent && pParent.record && pParent.record.data.FormattedID); })
                     (nodes);
 
-        nodetree.sum( function(d) { return d.Attachments? d.Attachments.TotalSize : 0; });
+        nodetree.sum( function(d) { return d.Attachments? d.Attachments.Size : 0; });
         nodetree.each( function(d) { 
             d.ChildAttachments = {};
             d.ChildAttachments.Size = d.value;

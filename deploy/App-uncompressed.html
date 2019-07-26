@@ -511,6 +511,32 @@ CARD_DISPLAY_FIELD_LIST:
                 }
             });
         }
+        var button0Txt = "Attachment Summary";
+        if (!gApp.down('#attachmentSummary')){
+            hdrBox.insert(1,{
+                xtype: 'rallybutton',
+                itemId: 'attachmentSummary',
+                margin: '10 0 5 20',
+                ticked: false,
+                text: button0Txt,
+                handler: function() {
+                    var depsOverlay = d3.select("#depsOverlay").attr("visibility");
+                    if (this.ticked === false) {
+                        this.setText('Return');
+                        this.ticked = true;
+                        d3.select("#attachments").attr("visibility","visible");
+                        d3.select("#tree").attr("visibility", "hidden");
+                        d3.select("#depsOverlay").attr("visibility", "hidden");
+                    } else {
+                        this.setText(button0Txt);
+                        this.ticked = false;
+                        d3.select("#attachments").attr("visibility","hidden");
+                        d3.select("#tree").attr("visibility", "visible");
+                        d3.select("#depsOverlay").attr("visibility", depsOverlay);
+                    }
+                }
+            });
+        }
     },
 
     _addFilterPanel: function() {
@@ -632,7 +658,7 @@ CARD_DISPLAY_FIELD_LIST:
                                 if (node) {
                                     node.Attachments = {};
                                     node.Attachments.Count = records.length;
-                                    node.Attachments.TotalSize = 
+                                    node.Attachments.Size = 
                                         _.reduce(
                                             _.pluck(records, function(record) {
                                                 return record.get('Size');
@@ -1360,12 +1386,12 @@ CARD_DISPLAY_FIELD_LIST:
                         return (pParent && pParent.record && pParent.record.data.FormattedID); })
                     (nodes);
 
-        nodetree.sum( function(d) { return d.Attachments? d.Attachments.TotalSize : 0 });
+        nodetree.sum( function(d) { return d.Attachments? d.Attachments.Size : 0; });
         nodetree.each( function(d) { 
             d.ChildAttachments = {};
             d.ChildAttachments.Size = d.value;
         });
-        nodetree.sum( function(d) { return d.Attachments? d.Attachments.Count : 0 });
+        nodetree.sum( function(d) { return d.Attachments? d.Attachments.Count : 0; });
         nodetree.each( function(d) { 
             d.ChildAttachments.Count = d.value;
         });
@@ -19057,10 +19083,13 @@ Object.defineProperty(exports, '__esModule', { value: true });
                 smallString += ",";
                 level -=1;
             }
-            console.log(smallString);
             smallString += ',' + this._getFieldTextAndEscape(item.data.record.data.Name);
 
             //Add more fields in here
+            smallString += ',' + (item.data.Attachments?item.data.Attachments.Size:'');
+            smallString += ',' + (item.data.Attachments?item.data.Attachments.Count:'');
+            smallString += ',' + item.ChildAttachments.Size;
+            console.log(smallString);
         }
         return smallString + '\n';
     },
@@ -19078,10 +19107,17 @@ Object.defineProperty(exports, '__esModule', { value: true });
             hdrData[item.depth] = item.data.record.data._type;
         });
         
-        var fieldnames = _.rest(hdrData).join(',') + ",Description" + "\n";
+        var fieldnames = _.rest(hdrData).join(',') + ",Description" + ",Attachments Size, Attachments Count, Attachments Total" + "\n";
         //Now we can start traversing the children
         textOut = that.traverseChildren(tree) + textOut;
-       
+
+        if (tree.ChildAttachments.Count > 0) {
+            for ( i = 0; i < fieldnames.split(',').length - 3; i++){
+                textOut += ',';
+            }
+            textOut += "Total Attachments Size";
+            textOut += "," + tree.ChildAttachments.Count + ',' + tree.ChildAttachments.Size + '\n';
+        }
         if (textOut.length > 0)
             return fieldnames + textOut;
         else
