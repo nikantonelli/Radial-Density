@@ -124,7 +124,6 @@ Ext.define("TreeExporter", {
             smallString += ',' + this._getFieldTextAndEscape(item.data.record.data.Name);
 
             //Add more fields in here
-            smallString += ',' + (item.data.Attachments?item.data.Attachments.Size:'');
             smallString += ',' + (item.data.Attachments?item.data.Attachments.Count:'');
             smallString += ',' + item.ChildAttachments.Size;
             console.log(smallString);
@@ -141,23 +140,22 @@ Ext.define("TreeExporter", {
         if (!tree) return;  //If user clicks export before the tree is ready.....
 
         //The 'tree' item is the root item. Get the fieldnames from the types
-        _.each(tree.descendants(), function(item) {
-            hdrData[item.depth] = item.data.record.data._type;
-        });
+//        this.descendantTypes = _.uniq( _.pluck(tree.descendants(), function(item) { return item.data.record.data._type}))
         
-        var fieldnames = _.rest(hdrData).join(',') + ",Description" + ",Attachments Size, Attachments Count, Attachments Total" + "\n";
+//        var fieldnames = _.rest(this.descendantTypes).join(',') + ",Description" + ", Attachments Count, Attachments Total" + "\n";
         //Now we can start traversing the children
         textOut = that.traverseChildren(tree) + textOut;
 
         if (tree.ChildAttachments.Count > 0) {
-            for ( i = 0; i < fieldnames.split(',').length - 3; i++){
+            for ( i = 0; i < tree.height; i++){
                 textOut += ',';
             }
             textOut += "Total Attachments Size";
             textOut += "," + tree.ChildAttachments.Count + ',' + tree.ChildAttachments.Size + '\n';
         }
         if (textOut.length > 0)
-            return fieldnames + textOut;
+//        return fieldnames + textOut;
+        return textOut;
         else
             return null;
     }

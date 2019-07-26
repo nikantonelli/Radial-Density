@@ -7,6 +7,8 @@ Ext.define('Rally.app.RadialDensity.app', {
     config: {
         defaultSettings: {
             includeStories: true,
+            includeDefects: true,
+            includeTasks: true,
             usePreliminaryEstimate: true,
             hideArchived: false,
             sizeStoriesByPlanEstimate: false,
@@ -144,6 +146,18 @@ CARD_DISPLAY_FIELD_LIST:
                 labelALign: 'middle'
             },
             {
+                name: 'includeDefects',
+                xtype: 'rallycheckboxfield',
+                fieldLabel: 'Include Defects Stories',
+                labelALign: 'middle'
+            },
+            {
+                name: 'includeTasks',
+                xtype: 'rallycheckboxfield',
+                fieldLabel: 'Include Tasks',
+                labelALign: 'middle'
+            },
+            {
                 name: 'validateData',
                 xtype: 'rallycheckboxfield',
                 fieldLabel: 'Check Data Sanity',
@@ -200,17 +214,19 @@ CARD_DISPLAY_FIELD_LIST:
 
     launch: function() {
         this.on({
-            redrawTree: { fn: this._resetTimer, scope: this, buffer: 500}
+            redrawTree: { fn: this._resetTimer, scope: this, buffer: 1000}
         });
         this.exporter = Ext.create("TreeExporter");
     },
 
     _resetTimer: function() {
+        gApp.setLoading("Loading artefacts..")
         if ( this.timer) clearTimeout(this.timer);
         this.timer = setTimeout(this._redrawTree, 500);
     },
     
     _redrawTree: function() {
+        gApp.setLoading(false);
         if (gApp.down('#loadingBox')) gApp.down('#loadingBox').destroy();
         clearTimeout(gApp.timer);
         if (gApp._nodeTree) {
@@ -257,6 +273,7 @@ CARD_DISPLAY_FIELD_LIST:
     _typeSizeStore: null,
     _typeSizeMax: 0,
     _storyStates: [],
+    _taskStates: [],
 
     //Entry point after creation of render box
     _onElementValid: function(rs) {
@@ -278,15 +295,24 @@ CARD_DISPLAY_FIELD_LIST:
                     }
                 }
             });
-        Rally.data.ModelFactory.getModel({
-            type: 'UserStory',
-            success: function(model) {
-                _.each(model.getField('ScheduleState').attributeDefinition.AllowedValues, function(value,idx) {
-                    gApp._storyStates.push( { name: value.StringValue, value : idx});
-                });
-            }
-        });
-        //Add any useful selectors into this container ( which is inserted before the rootSurface )
+            Rally.data.ModelFactory.getModel({
+                type: 'UserStory',
+                success: function(model) {
+                    _.each(model.getField('ScheduleState').attributeDefinition.AllowedValues, function(value,idx) {
+                        gApp._storyStates.push( { name: value.StringValue, value : idx});
+                    });
+                }
+            });
+            Rally.data.ModelFactory.getModel({
+                type: 'Task',
+                success: function(model) {
+                    _.each(model.getField('State').attributeDefinition.AllowedValues, function(value,idx) {
+                        gApp._taskStates.push( { name: value.StringValue, value : idx});
+                    });
+                }
+            });
+
+            //Add any useful selectors into this container ( which is inserted before the rootSurface )
         //Choose a point when all are 'ready' to jump off into the rest of the app
         var hdrBox = this.insert (0,{
             xtype: 'container',
@@ -639,7 +665,6 @@ CARD_DISPLAY_FIELD_LIST:
     _getAttachments: function(records) {
         _.each(records, function(record) {
             var node = gApp._findNodeByRef(record.get('_ref'));
-//            debugger;
             if (record.get('Attachments').Count >0){
                 var collectionConfig = {
                     fetch: ['Size','Type'],
@@ -662,7 +687,7 @@ CARD_DISPLAY_FIELD_LIST:
                         }
                     }
                 };
-                record.getCollection('Attachments').load(collectionConfig);
+                record.getCollection('Attachments').load(Ext.clone(collectionConfig));
             }
         });
     },
@@ -687,7 +712,7 @@ CARD_DISPLAY_FIELD_LIST:
                     fetch: gApp.STORE_FETCH_FIELD_LIST,
                     callback: function(records, operation, success) {
                         //Start the recursive trawl down through the levels
-                        if (records.length)  {
+                        if (success && records.length)  {
                             gApp._getArtifacts(records);
                             if (gApp.getSetting('fetchAttachments') === true) {
                                 gApp._getAttachments(records);
@@ -702,7 +727,7 @@ CARD_DISPLAY_FIELD_LIST:
                         value: false
                     }];
                 }
-                parent.getCollection( 'Children').load( collectionConfig );
+                parent.getCollection( 'Children').load( Ext.clone(collectionConfig) );
             }
             else {
                 //We are features or UserStories when we come here
@@ -713,24 +738,31 @@ CARD_DISPLAY_FIELD_LIST:
                     }],
                     fetch: gApp.STORE_FETCH_FIELD_LIST,
                     callback: function(records, operation, s) {
-                        if (s) {
-                            if (records && records.length) {
-                                //At this point, we need to decide whether we are adding nodes to the main tree
-                                if (gApp.getSetting('includeStories')){
-                                    gApp._nodes = gApp._nodes.concat( gApp._createNodes(records));
-                                    gApp.fireEvent('redrawTree');
-                                } 
-                                if (gApp.getSetting('fetchAttachments') === true) {
-                                    gApp._getAttachments(records);
-                                }    
-                            }
+                        if (s && records && records.length) {
+                            gApp._getArtifacts(records);
+                            gApp.fireEvent('redrawTree');
+                            
+                            if (gApp.getSetting('fetchAttachments') === true) {
+                                gApp._getAttachments(records);
+                            }    
                         }
                     }
                 };
                 //If we are lowest level PI, then we need to fetch User Stories
-                if (parent.hasField('UserStories')) {  
+                if (gApp.getSetting('includeStories') && parent.hasField('UserStories')) {  
                     collectionConfig.fetch.push(gApp._getModelFromOrd(0).split("/").pop()); //Add the lowest level field on User Stories
-                    parent.getCollection( 'UserStories').load( collectionConfig );
+                    parent.getCollection( 'UserStories').load( Ext.clone(collectionConfig) );
+                } 
+                //If we are storeis, then we need to fetch Defects
+                if (gApp.getSetting('includeDefects') && parent.hasField('Defects')) {  
+                    collectionConfig.fetch.push('Requirement'); //Add the User Story not the Test Case
+                    parent.getCollection( 'Defects').load( Ext.clone(collectionConfig) );
+                } 
+                //If we are defects or storeis, then we need to fetch Tasks
+                
+                if (gApp.getSetting('includeTasks') && parent.hasField('Tasks')) {  
+                    collectionConfig.fetch.push('WorkProduct'); //Add the User Story not the Test Case
+                    parent.getCollection( 'Tasks').load( Ext.clone(collectionConfig) );
                 } 
                 // //If we are userstories, then we need to fetch tasks
                 // else if (parent.hasField('Tasks') && (gApp.getSetting('includeStories'))){
@@ -823,7 +855,7 @@ CARD_DISPLAY_FIELD_LIST:
                     if (!gApp._dataCheckForItem(d)) {
                         lClass.push( "error--node");    
                     }else {                    
-                        if (d.data.record.isUserStory()) { 
+                        if (d.data.record.isUserStory() || d.data.record.isDefect()) { 
                             lClass.push(gApp.settings.colourScheme  + (_.find (gApp._storyStates, { 'name' : d.data.record.get('ScheduleState') })).value + '-' + gApp._storyStates.length);
                             lClass.push(d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"");
                         }
@@ -835,11 +867,15 @@ CARD_DISPLAY_FIELD_LIST:
                                 lClass.push('error--node');
                             }
                         }
-                        if (d.data.record.get('Predecessors').Count > 0) {
+                        else if (d.data.record.isTask()) {
+                            lClass.push(gApp.settings.colourScheme  + (_.find (gApp._taskStates, { 'name' : d.data.record.get('State') })).value + '-' + gApp._taskStates.length);
+                            lClass.push(d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"");
+                        }
+                        if (d.data.record.get('Predecessors') && (d.data.record.get('Predecessors').Count > 0)) {
                           if (gApp.getSetting('flashDeps')) lClass.push("gotPredecessors");
                             gApp._fetchPredecessors(d);
                         }
-                        else if (d.data.record.get('Successors').Count > 0) {
+                        else if (d.data.record.get('Successors') && (d.data.record.get('Successors').Count > 0)) {
                             if (gApp.getSetting('flashDeps')) lClass.push("gotSuccessors");
                             gApp._fetchSuccessors(d);
                         }                            
@@ -868,7 +904,6 @@ CARD_DISPLAY_FIELD_LIST:
     },
 
     stash: function (d) {
-        //debugger;   //TODO: Get info and apply dependency links?
         d.x0s = d.x0;
         d.y0s = d.y0;
         d.x1s = d.x1;
@@ -1344,7 +1379,19 @@ CARD_DISPLAY_FIELD_LIST:
         //Nicely inconsistent in that the 'field' representing a parent of a user story has the name the same as the type
         // of the first level of the type hierarchy.
         var parentField = gApp._getModelFromOrd(0).split("/").pop();
-        var parent = record.hasField('WorkProduct')? record.data.WorkProduct : record.hasField('Tasks')?record.data[parentField]:record.data.Parent;
+        var parent = null;
+        if (record.isPortfolioItem()) {
+            parent = record.data.Parent;
+        }
+        else if (record.isUserStory()) {
+            parent = record.data[parentField];
+        }
+        else if (record.isTask()) {
+            parent = record.data.WorkProduct;
+        }
+        else if (record.isDefect()) {
+            parent = record.data.Requirement;
+        }
         var pParent = null;
         if (parent ){
             //Check if parent already in the node list. If so, make this one a child of that one
