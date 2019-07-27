@@ -148,10 +148,10 @@ Ext.define('Rally.app.RadialDensity.app', {
     componentCls: 'app',
     config: {
         defaultSettings: {
-            includeStories: false,
-            includeDefects: false,
-            includeTasks: false,
-            includeTestCases: false,
+            includeStories: true,
+            includeDefects: true,
+            includeTasks: true,
+            includeTestCases: true,
             usePreliminaryEstimate: true,
             hideArchived: false,
             sizeStoriesByPlanEstimate: false,
@@ -898,25 +898,25 @@ CARD_DISPLAY_FIELD_LIST:
                 };
                 //If we are lowest level PI, then we need to fetch User Stories
                 if (gApp.getSetting('includeStories') && parent.hasField('UserStories')&&
-                    parent.get('UserStories').Count > 0 ) {  
+                    (parent.get('UserStories').Count > 0) ) {  
                     collectionConfig.fetch.push(gApp._getModelFromOrd(0).split("/").pop()); //Add the lowest level field on User Stories
                     parent.getCollection( 'UserStories').load( Ext.clone(collectionConfig) );
                 } 
                 //If we are storeis, then we need to fetch Defects
                 if (gApp.getSetting('includeDefects') && parent.hasField('Defects')&&
-                    parent.get('Defects').Count > 0 ) {  
+                    (parent.get('Defects').Count > 0) ) {  
                     collectionConfig.fetch.push('Requirement'); //Add the User Story not the Test Case
                     parent.getCollection( 'Defects').load( Ext.clone(collectionConfig) );
                 } 
                 //If we are defects or storeis, then we need to fetch Tasks
                 
                 if (gApp.getSetting('includeTasks') && parent.hasField('Tasks') &&
-                        parent.get('Tasks').Count > 0 ) {  
+                        (parent.get('Tasks').Count > 0) ) {  
                     collectionConfig.fetch.push('WorkProduct'); //Add the User Story not the Test Case
                     parent.getCollection( 'Tasks').load( Ext.clone(collectionConfig) );
                 } 
                 if (gApp.getSetting('includeTestCases') && parent.hasField('TestCases')  &&
-                        parent.get('TestCases').Count > 0 ) {  
+                        (parent.get('TestCases').Count > 0) ) {  
                     collectionConfig.fetch.push('WorkProduct'); //Add the User Story not the Test Case
                     parent.getCollection( 'TestCases').load( Ext.clone(collectionConfig) );
                 } 
