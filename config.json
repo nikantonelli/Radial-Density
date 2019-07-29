@@ -1,5 +1,5 @@
 {
-    "name": "Density Map",
+    "name": "Radial Density Map",
     "className": "Rally.app.RadialDensity.app",
     "server": "https://rally1.rallydev.com",
     "sdk": "2.1",

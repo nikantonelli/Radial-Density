@@ -1,141 +1,6 @@
 (function () {
     var Ext = window.Ext4 || window.Ext;
 
-    Ext.define('Ext.data.MyConnection', {
-    override: 'Ext.data.Connection',
-    mixins: {
-        observable:  Ext.util.Observable 
-    },
-    
-               
-                                  
-      
-
-    statics: {
-        requestId: 0
-    },
-
-    url: null,
-    async: false,
-    method: null,
-    username: 'trash@acme.com',
-    password: 'NotSet',
-
-    
-    disableCaching: true,
-
-    
-    withCredentials: false,
-
-    
-    binary: false,
-
-    
-    cors: false,
-
-    isXdr: false,
-
-    defaultXdrContentType: 'text/plain',
-
-    
-    disableCachingParam: '_dc',
-    timeout : 150000,
-    sendQueues: [],
-    sendQueue: 0,
-    
-
-    useDefaultHeader : true,
-    defaultPostHeader : 'application/x-www-form-urlencoded; charset=UTF-8',
-    useDefaultXhrHeader : true,
-    defaultXhrHeader : 'XMLHttpRequest',
-
-    constructor : function(config) {
-        config = config || {};
-        Ext.apply(this, config);
-        sendQueues[0] = [];
-        sendQueues[1] = [];
-        this.requests = {};
-        this.mixins.observable.constructor.call(this);
-        console.log(this);
-    },
-
-    
-    request : function(options) {
-        Ext.Ajax.timeout = 150000;
-        options = options || {};
-        var me = this,
-            scope = options.scope || window,
-            username = options.username || me.username,
-            password = options.password || me.password || '',
-            async,
-            requestOptions,
-            request,
-            headers,
-            xhr;
-        if (me.fireEvent('beforerequest', me, options) !== false) {
-
-            requestOptions = me.setOptions(options, scope);
-
-            if (me.isFormUpload(options)) {
-                me.upload(options.form, requestOptions.url, requestOptions.data, options);
-                return null;
-            }
-
-            
-            if (options.autoAbort || me.autoAbort) {
-                me.abort();
-            }
-
-            
-            async = options.async !== false ? (options.async || me.async) : false;
-            xhr = me.openRequest(options, requestOptions, async, username, password);
-
-            
-            if (!me.isXdr) {
-                headers = me.setupHeaders(xhr, options, requestOptions.data, requestOptions.params);
-            }
-
-            
-            request = {
-                id: ++Ext.data.Connection.requestId,
-                xhr: xhr,
-                headers: headers,
-                options: options,
-                async: async,
-                binary: options.binary || me.binary,
-                timeout: setTimeout(function() {
-                    request.timedout = true;
-                    me.abort(request);
-                },  me.timeout)
-            };
-
-            me.requests[request.id] = request;
-            me.latestId = request.id;
-            
-            if (async) {
-                if (!me.isXdr) {
-                    xhr.onreadystatechange = Ext.Function.bind(me.onStateChange, me, [request]);
-                }
-            }
-
-            if (me.isXdr) {
-                me.processXdrRequest(request, xhr);
-            }
-
-            
-            xhr.send(requestOptions.data);
-            if (!async) {
-                return me.onComplete(request);
-            }
-            return request;
-        } else {
-            Ext.callback(options.callback, options.scope, [options, undefined, undefined]);
-            return null;
-        }
-    },
-});
-
-
 Ext.define('Rally.app.RadialDensity.app', {
     extend: 'Rally.app.App',
     componentCls: 'app',
@@ -219,7 +84,7 @@ Ext.define('Rally.app.RadialDensity.app', {
         'Ordinal',
         'Release',
         'Iteration',
-        'Milestones',
+//        'Milestones',
         'UserStories',
         'Defects',
         'Tasks',
@@ -418,6 +283,7 @@ CARD_DISPLAY_FIELD_LIST:
     _typeSizeStore: null,
     _typeSizeMax: 0,
     _storyStates: [],
+    _defectStates: [],
     _taskStates: [],
     _tcStates: [],
 
@@ -852,7 +718,11 @@ CARD_DISPLAY_FIELD_LIST:
         });
     },
     
-    _getArtifacts: function(data) {
+    _getArtifacts: function(records) {
+    
+    },
+    
+    _fetchTheData: function(data) {
         console.log('Loading ', data.length, ' artefacts');
         gApp.setLoading("Loading artefacts..");
 
@@ -864,7 +734,10 @@ CARD_DISPLAY_FIELD_LIST:
         _.each(data, function(parent) {
             //Limit this to portfolio items down to just above feature level and not beyond.
             //The lowest level portfolio item type has 'UserStories' not 'Children'
-            if (parent.hasField('Children') && (!parent.data._ref.includes('hierarchicalrequirement'))){      
+            if (parent.hasField('Children') && 
+                (parent.get('Children').Count > 0) && 
+                (!parent.data._ref.includes('hierarchicalrequirement'))){      
+
                 collectionConfig = {
                     sorters: [{
                         property: 'DragAndDropRank',

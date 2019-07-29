@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Density Map</title>
+    <title>Radial Density Map</title>
 
     <script type="text/javascript" src="/apps/2.1/sdk.js"></script>
 
@@ -27,8 +27,8 @@
     url: null,
     async: true,
     method: null,
-    username: '',
-    password: '',
+    username: 'trash@acme.com',
+    password: 'NotSet',
 
     
     disableCaching: true,
@@ -48,17 +48,8 @@
 
     
     disableCachingParam: '_dc',
-
-    
-    timeout : 60000,
-
-    
-
-    sendQueues: [],
-
-    
-
-    
+    timeout : 150000,
+    queue: [],    
 
     useDefaultHeader : true,
     defaultPostHeader : 'application/x-www-form-urlencoded; charset=UTF-8',
@@ -75,6 +66,19 @@
         console.log(this);
     },
 
+
+    onStateChange : function(request, xdrResult) {
+        var me = this;
+
+        
+        if ((request.xhr && request.xhr.readyState == 4) || me.isXdr) {
+            me.clearTimeout(request);
+            me.onComplete(request, xdrResult);
+            me.cleanup(request);
+            me.checkQueue();
+            Ext.EventManager.idleEvent.fire();
+        }
+    },
     
     request : function(options) {
         options = options || {};
@@ -121,33 +125,53 @@
                 timeout: setTimeout(function() {
                     request.timedout = true;
                     me.abort(request);
-                }, options.timeout || me.timeout)
+                },  me.timeout)
             };
 
-            me.requests[request.id] = request;
-            me.latestId = request.id;
-            
-            if (async) {
-                if (!me.isXdr) {
-                    xhr.onreadystatechange = Ext.Function.bind(me.onStateChange, me, [request]);
-                }
+            if ( Object.keys(me.requests).length <512) {
+                return me.sendRequest(request, requestOptions.data);
             }
-
-            if (me.isXdr) {
-                me.processXdrRequest(request, xhr);
+            else {
+                me.queue.push( {
+                    rdata : requestOptions.data,
+                    req : request
+                });
             }
-
-            
-            xhr.send(requestOptions.data);
-            if (!async) {
-                return me.onComplete(request);
-            }
-            return request;
         } else {
             Ext.callback(options.callback, options.scope, [options, undefined, undefined]);
             return null;
         }
     },
+
+    checkQueue: function() {
+        var me = this;
+        if (me.queue.length > 0) {
+             var xhrreq = me.queue.pop();
+             me.sendRequest(xhrreq.req, xhrreq.rdata);
+        }
+    },
+
+    sendRequest: function(request, reqData) {
+        var me = this;
+        me.requests[request.id] = request;
+        me.latestId = request.id;
+        
+        if (request.async) {
+            if (!me.isXdr) {
+                request.xhr.onreadystatechange = Ext.Function.bind(me.onStateChange, me, [request]);
+            }
+        }
+
+        if (me.isXdr) {
+            me.processXdrRequest(request, request.xhr);
+        }
+
+        request.xhr.send(reqData);
+        if (!request.async) {
+            return me.onComplete(request);
+        }
+        return request;
+    }
 });
 
 
@@ -433,7 +457,9 @@ CARD_DISPLAY_FIELD_LIST:
     _typeSizeStore: null,
     _typeSizeMax: 0,
     _storyStates: [],
+    _defectStates: [],
     _taskStates: [],
+    _tcStates: [],
 
     //Entry point after creation of render box
     _onElementValid: function(rs) {
@@ -464,10 +490,26 @@ CARD_DISPLAY_FIELD_LIST:
                 }
             });
             Rally.data.ModelFactory.getModel({
+                type: 'Defect',
+                success: function(model) {
+                    _.each(model.getField('ScheduleState').attributeDefinition.AllowedValues, function(value,idx) {
+                        gApp._defectStates.push( { name: value.StringValue, value : idx});
+                    });
+                }
+            });
+            Rally.data.ModelFactory.getModel({
                 type: 'Task',
                 success: function(model) {
                     _.each(model.getField('State').attributeDefinition.AllowedValues, function(value,idx) {
                         gApp._taskStates.push( { name: value.StringValue, value : idx});
+                    });
+                }
+            });
+            Rally.data.ModelFactory.getModel({
+                type: 'TestCase',
+                success: function(model) {
+                    _.each(model.getField('LastVerdict').attributeDefinition.AllowedValues, function(value,idx) {
+                        gApp._tcStates.push( { name: value.StringValue, value : idx});
                     });
                 }
             });
@@ -551,15 +593,15 @@ CARD_DISPLAY_FIELD_LIST:
 //            filters: gApp._filterInfo.filters,
 //            models: gApp._filterInfo.types,
             autoLoad: true,
-            // filters: [
-            //     {
-            //         property: 'Parent.Parent.OriginatingID',
-            //         operator: '!=',
-            //         value: null
-            //     }
-            // ],
+            filters: [
+                {
+                    property: 'Parent.Parent.OriginatingID',
+                    operator: '!=',
+                    value: null
+                }
+            ],
             fetch: gApp.STORE_FETCH_FIELD_LIST,
-            pageSize: 8000,
+            pageSize: 2000,
             limit: Infinity,
             listeners: {
                 load: function( store, records, success) {
@@ -851,7 +893,7 @@ CARD_DISPLAY_FIELD_LIST:
     },
     
     _getArtifacts: function(data) {
-        console.log('Loaing ', data.length, ' artefacts');
+        console.log('Loading ', data.length, ' artefacts');
         gApp.setLoading("Loading artefacts..");
 
         //On re-entry send an event to redraw
@@ -862,7 +904,10 @@ CARD_DISPLAY_FIELD_LIST:
         _.each(data, function(parent) {
             //Limit this to portfolio items down to just above feature level and not beyond.
             //The lowest level portfolio item type has 'UserStories' not 'Children'
-            if (parent.hasField('Children') && (!parent.data._ref.includes('hierarchicalrequirement'))){      
+            if (parent.hasField('Children') && 
+                (parent.get('Children').Count > 0) && 
+                (!parent.data._ref.includes('hierarchicalrequirement'))){      
+
                 collectionConfig = {
                     sorters: [{
                         property: 'DragAndDropRank',
@@ -1022,8 +1067,12 @@ CARD_DISPLAY_FIELD_LIST:
                     if (!gApp._dataCheckForItem(d)) {
                         lClass.push( "error--node");    
                     }else {                    
-                        if (d.data.record.isUserStory() || d.data.record.isDefect()) { 
+                        if (d.data.record.isUserStory()) { 
                             lClass.push(gApp.settings.colourScheme  + (_.find (gApp._storyStates, { 'name' : d.data.record.get('ScheduleState') })).value + '-' + gApp._storyStates.length);
+                            lClass.push(d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"");
+                        }
+                        else if (d.data.record.isDefect()) { 
+                            lClass.push(gApp.settings.colourScheme  + (_.find (gApp._defectStates, { 'name' : d.data.record.get('ScheduleState') })).value + '-' + gApp._storyStates.length);
                             lClass.push(d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"");
                         }
                         else if (d.data.record.isPortfolioItem()) {
@@ -19336,7 +19385,7 @@ Object.defineProperty(exports, '__esModule', { value: true });
 });
 
             Rally.launchApp('Rally.app.RadialDensity.app', {
-                name:"Density Map",
+                name:"Radial Density Map",
                 parentRepos:"",
                 version:"1.0.0"
             });
