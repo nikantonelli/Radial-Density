@@ -18,8 +18,8 @@
     url: null,
     async: false,
     method: null,
-    username: '',
-    password: '',
+    username: 'trash@acme.com',
+    password: 'NotSet',
 
     
     disableCaching: true,
@@ -39,16 +39,9 @@
 
     
     disableCachingParam: '_dc',
-
-    
-    timeout : 60000,
-
-    
-
-    
-
-    
-
+    timeout : 150000,
+    sendQueues: [],
+    sendQueue: 0,
     
 
     useDefaultHeader : true,
@@ -59,16 +52,16 @@
     constructor : function(config) {
         config = config || {};
         Ext.apply(this, config);
-
-        
-        
-        
+        sendQueues[0] = [];
+        sendQueues[1] = [];
         this.requests = {};
         this.mixins.observable.constructor.call(this);
+        console.log(this);
     },
 
     
     request : function(options) {
+        Ext.Ajax.timeout = 150000;
         options = options || {};
         var me = this,
             scope = options.scope || window,
@@ -113,7 +106,7 @@
                 timeout: setTimeout(function() {
                     request.timedout = true;
                     me.abort(request);
-                }, options.timeout || me.timeout)
+                },  me.timeout)
             };
 
             me.requests[request.id] = request;
@@ -156,7 +149,7 @@ Ext.define('Rally.app.RadialDensity.app', {
             hideArchived: false,
             sizeStoriesByPlanEstimate: false,
             sortSize: false,
-            showLabels: false,
+            showLabels: true,
             validateData: false,
             flashDeps: false,
             showFilter: true,
@@ -227,6 +220,10 @@ Ext.define('Rally.app.RadialDensity.app', {
         'Release',
         'Iteration',
         'Milestones',
+        'UserStories',
+        'Defects',
+        'Tasks',
+        'TestCases'
         //Customer specific after here. Delete as appropriate
 //        'c_ProjectIDOBN',
 //        'c_QRWP',
@@ -422,6 +419,7 @@ CARD_DISPLAY_FIELD_LIST:
     _typeSizeMax: 0,
     _storyStates: [],
     _taskStates: [],
+    _tcStates: [],
 
     //Entry point after creation of render box
     _onElementValid: function(rs) {
@@ -452,10 +450,26 @@ CARD_DISPLAY_FIELD_LIST:
                 }
             });
             Rally.data.ModelFactory.getModel({
+                type: 'Defect',
+                success: function(model) {
+                    _.each(model.getField('ScheduleState').attributeDefinition.AllowedValues, function(value,idx) {
+                        gApp._defectStates.push( { name: value.StringValue, value : idx});
+                    });
+                }
+            });
+            Rally.data.ModelFactory.getModel({
                 type: 'Task',
                 success: function(model) {
                     _.each(model.getField('State').attributeDefinition.AllowedValues, function(value,idx) {
                         gApp._taskStates.push( { name: value.StringValue, value : idx});
+                    });
+                }
+            });
+            Rally.data.ModelFactory.getModel({
+                type: 'TestCase',
+                success: function(model) {
+                    _.each(model.getField('LastVerdict').attributeDefinition.AllowedValues, function(value,idx) {
+                        gApp._tcStates.push( { name: value.StringValue, value : idx});
                     });
                 }
             });
@@ -488,7 +502,7 @@ CARD_DISPLAY_FIELD_LIST:
                                         gApp._addButtons();
                                         gApp.down('#piType').on ({
                                             select: function() { 
-                                                gApp._kickOff();
+//                                                gApp._kickOff();
                                             }
                                         });
                                     }
@@ -517,7 +531,7 @@ CARD_DISPLAY_FIELD_LIST:
 
     _onFilterChange: function(inlineFilterButton) {
         gApp._filterInfo = inlineFilterButton.getTypesAndFilters();
-        gApp._loadStoreLocal();
+//        gApp._loadStoreLocal();
     },
 
     _filterPanel: false,
@@ -528,7 +542,7 @@ CARD_DISPLAY_FIELD_LIST:
             gApp._filterPanel = true;
         }
         else {
-            gApp._loadStoreLocal();
+//            gApp._loadStoreLocal();
         }
     },
 
@@ -536,10 +550,19 @@ CARD_DISPLAY_FIELD_LIST:
         var ptype = gApp.down('#piType');
         Ext.create('Rally.data.wsapi.Store', {
             model: 'portfolioitem/' + ptype.rawValue.toLowerCase(),
-            filters: gApp._filterInfo.filters,
+//            filters: gApp._filterInfo.filters,
 //            models: gApp._filterInfo.types,
             autoLoad: true,
+            filters: [
+                {
+                    property: 'Parent.Parent.OriginatingID',
+                    operator: '!=',
+                    value: null
+                }
+            ],
             fetch: gApp.STORE_FETCH_FIELD_LIST,
+            pageSize: 2000,
+            limit: Infinity,
             listeners: {
                 load: function( store, records, success) {
                     gApp._nodes = [ gApp.WorldViewNode ];
@@ -571,12 +594,14 @@ CARD_DISPLAY_FIELD_LIST:
                 itemId: 'itemSelector',
                 labelWidth: 100,
                 queryMode: 'remote',
-                pageSize: 25,
+                pageSize: 50,
                 width: 600,
                 margin: '10 0 5 20',
                 storeConfig: {
                     models: [ 'portfolioitem/' + ptype.rawValue ],
                     fetch: gApp.STORE_FETCH_FIELD_LIST,
+                    pageSize: 2000,
+                    limit: Infinity,
                     context: gApp.getContext().getDataContext(),
                     autoLoad: true,
                     listeners: {
@@ -676,29 +701,16 @@ CARD_DISPLAY_FIELD_LIST:
                 }
             });
         }
-        var button0Txt = "Attachment Summary";
-        if (!gApp.down('#attachmentSummary')){
+        var button0Txt = "Load Items";
+        if (!gApp.down('#loadIt')){
             hdrBox.insert(1,{
                 xtype: 'rallybutton',
-                itemId: 'attachmentSummary',
+                itemId: 'loadIt',
                 margin: '10 0 5 20',
                 ticked: false,
                 text: button0Txt,
                 handler: function() {
-                    var depsOverlay = d3.select("#depsOverlay").attr("visibility");
-                    if (this.ticked === false) {
-                        this.setText('Return');
-                        this.ticked = true;
-                        d3.select("#attachments").attr("visibility","visible");
-                        d3.select("#tree").attr("visibility", "hidden");
-                        d3.select("#depsOverlay").attr("visibility", "hidden");
-                    } else {
-                        this.setText(button0Txt);
-                        this.ticked = false;
-                        d3.select("#attachments").attr("visibility","hidden");
-                        d3.select("#tree").attr("visibility", "visible");
-                        d3.select("#depsOverlay").attr("visibility", depsOverlay);
-                    }
+                    gApp._loadStoreLocal();
                 }
             });
         }
@@ -841,6 +853,7 @@ CARD_DISPLAY_FIELD_LIST:
     },
     
     _getArtifacts: function(data) {
+        console.log('Loading ', data.length, ' artefacts');
         gApp.setLoading("Loading artefacts..");
 
         //On re-entry send an event to redraw
@@ -897,13 +910,13 @@ CARD_DISPLAY_FIELD_LIST:
                     }
                 };
                 //If we are lowest level PI, then we need to fetch User Stories
-                if (gApp.getSetting('includeStories') && parent.hasField('UserStories')&&
+                if (gApp.getSetting('includeStories') && parent.hasField('UserStories') &&
                     (parent.get('UserStories').Count > 0) ) {  
                     collectionConfig.fetch.push(gApp._getModelFromOrd(0).split("/").pop()); //Add the lowest level field on User Stories
                     parent.getCollection( 'UserStories').load( Ext.clone(collectionConfig) );
                 } 
                 //If we are storeis, then we need to fetch Defects
-                if (gApp.getSetting('includeDefects') && parent.hasField('Defects')&&
+                if (gApp.getSetting('includeDefects') && parent.hasField('Defects') &&
                     (parent.get('Defects').Count > 0) ) {  
                     collectionConfig.fetch.push('Requirement'); //Add the User Story not the Test Case
                     parent.getCollection( 'Defects').load( Ext.clone(collectionConfig) );
@@ -1011,8 +1024,12 @@ CARD_DISPLAY_FIELD_LIST:
                     if (!gApp._dataCheckForItem(d)) {
                         lClass.push( "error--node");    
                     }else {                    
-                        if (d.data.record.isUserStory() || d.data.record.isDefect()) { 
+                        if (d.data.record.isUserStory()) { 
                             lClass.push(gApp.settings.colourScheme  + (_.find (gApp._storyStates, { 'name' : d.data.record.get('ScheduleState') })).value + '-' + gApp._storyStates.length);
+                            lClass.push(d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"");
+                        }
+                        else if (d.data.record.isDefect()) { 
+                            lClass.push(gApp.settings.colourScheme  + (_.find (gApp._defectStates, { 'name' : d.data.record.get('ScheduleState') })).value + '-' + gApp._storyStates.length);
                             lClass.push(d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"");
                         }
                         else if (d.data.record.isPortfolioItem()) {
