@@ -732,14 +732,18 @@ CARD_DISPLAY_FIELD_LIST:
         var wrkr = new Worker("worker.js");
         console.log("Created worker: ", wrkr);
         var thread = {
+            lastCommand: '',
             worker: wrkr,
             state: 'Initiate',
             id: ++gApp.lastThreadID,
-            context: gApp
         };
         
         gApp.runningThreads.push(thread);
         wrkr.onmessage = gApp._threadMessage;
+        gApp._giveToThread(thread, {
+            command: 'initialise',
+            id: thread.id,
+        });
     },
 
     _checkThreadState: function(thread) {
@@ -748,8 +752,9 @@ CARD_DISPLAY_FIELD_LIST:
 
     _wakeThread: function(thread) {
         if ( gApp._checkThreadState(thread) === 'Asleep') {  //False = thread asleep
+            thread.lastMessage = 'wake';
             thread.worker.postMessage({
-                msg: 'wake'
+                command: thread.lastMessage
             });
         }
     },
@@ -759,8 +764,6 @@ CARD_DISPLAY_FIELD_LIST:
             //Check the required amount of threads are still running
             gApp._threadCreate();
         }
-
-        debugger;
         _.each(gApp.runningThreads, function(thread) {
             if ((gApp.recordsToProcess.length > 0) && (thread.state === 'Asleep')) {
                 gApp._wakeThread(thread);
@@ -769,18 +772,30 @@ CARD_DISPLAY_FIELD_LIST:
     },
 
     _giveToThread: function(thread, msg){
-        debugger;
         thread.worker.postMessage(msg);
     },
 
-    _threadReadRecord: function(thread, record) {
+    _threadReadChildren: function(thread, record) {
+        thread.lastCommand = 'readchildren';
         gApp._giveToThread(thread, {
-            msg: 'read',
-            record: record
+            command: thread.lastCommand,
+            objectID: record.get('ObjectID'),
+            hasChildren: (record.hasField('Children') && (record.get('Children').Count > 0) && (!record.data._ref.includes('hierarchicalrequirement'))) ?
+                Rally.util.Ref.getUrl(record.get('Children')._ref):null,
+            hasDefects: (gApp.getSetting('includeDefects') && record.hasField('Defects') && (record.get('Defects').Count > 0) ) ?
+                Rally.util.Ref.getUrl(record.get('Defects')._ref):null,
+            hasStories: (gApp.getSetting('includeStories') && record.hasField('UserStories') && (record.get('UserStories').Count > 0)) ?
+                Rally.util.Ref.getUrl(record.get('UserStories')._ref):null,
+            hasTasks: (gApp.getSetting('includeTasks') && record.hasField('Tasks') && (record.get('Tasks').Count > 0) ) ?
+                Rally.util.Ref.getUrl(record.get('Tasks')._ref):null,
+            hasTestCases:(gApp.getSetting('includeTestCases') && record.hasField('TestCases')  && (record.get('TestCases').Count > 0) ) ?
+                Rally.util.Ref.getUrl(record.get('TestCases')._ref):null,
+
         });    //Send a wakeup message with an item
     },
 
     _getArtifacts: function(records) {
+        gApp._nodes = gApp._nodes.concat( gApp._createNodes(records)); 
         _.each(records, function(record) {
             gApp.recordsToProcess.push(record);
         });
@@ -789,113 +804,21 @@ CARD_DISPLAY_FIELD_LIST:
 
     //This is in the context of the worker thread even though the code is here
     _threadMessage: function(msg) {
-        debugger;
         if ((msg.data.response === 'Alive') && (msg.data.state === 'Asleep')) {
-            console.log('Thread ' + msg.data.id + ' responded');
-        } else if (msg.data.state === 'Initiate') { 
-            gApp._giveToThread(thread, {
-                msg: 'create',
-                thread: thread
-            });
-        }
-        else if (msg.data.state === 'Asleep') { 
+            //TODO: Add timeout control here. If the process is busy, it will not return Asleep, but will be Alive.
+            // console.log('Thread ' + msg.data.id + ' responded to ping');
+        } 
+
+        if (msg.data.state === 'Asleep') { 
             if (gApp.recordsToProcess.length > 0) {
                 //We have some, so give to a thread
-                debugger;
-
+                var thread = _.find(gApp.runningThreads, { id: msg.data.id});
+                gApp._threadReadChildren(thread, gApp.recordsToProcess.pop());
             }
         }
     },
     
-    _fetchTheData: function(data) {
-        console.log('Loading ', data.length, ' artefacts');
-        gApp.setLoading("Loading artefacts..");
-debugger;
-        if (gApp.getSetting('fetchAttachments') === true) {
-            gApp._getAttachments(data);
-        }
-        //On re-entry send an event to redraw
-        gApp._nodes = gApp._nodes.concat( gApp._createNodes(data));    //Add what we started with to the node list
-        this.fireEvent('redrawTree');
-        //Starting with highest selected by the combobox, go down
-
-        _.each(data, function(parent) {
-            console.log("processing item: " + parent.get('FormattedID'));
-            //Limit this to portfolio items down to just above feature level and not beyond.
-            //The lowest level portfolio item type has 'UserStories' not 'Children'
-            if (parent.hasField('Children') && 
-                (parent.get('Children').Count > 0) && 
-                (!parent.data._ref.includes('hierarchicalrequirement'))){      
-
-                collectionConfig = {
-                    sorters: [{
-                        property: 'DragAndDropRank',
-                        direction: 'ASC'
-                    }],
-                    fetch: gApp.STORE_FETCH_FIELD_LIST,
-                    callback: function(records, operation, success) {
-                        //Start the recursive trawl down through the levels
-                        if (success && records.length)  {
-                            gApp._getArtifacts(records);
-                        }
-                    }
-                };
-                if (gApp.getSetting('hideArchived')) {
-                    collectionConfig.filters = [{
-                        property: 'Archived',
-                        operator: '=',
-                        value: false
-                    }];
-                }
-                parent.getCollection( 'Children').load( Ext.clone(collectionConfig) );
-            }
-            else {
-                //We are features or UserStories when we come here
-                collectionConfig = {
-                    sorters: [{
-                        property: 'DragAndDropRank',
-                        direction: 'ASC'  
-                    }],
-                    fetch: gApp.STORE_FETCH_FIELD_LIST,
-                    callback: function(records, operation, s) {
-                        if (s && records && records.length) {
-                            gApp._getArtifacts(records);
-                            gApp.fireEvent('redrawTree');  
-                        }
-                    }
-                };
-                //If we are lowest level PI, then we need to fetch User Stories
-                if (gApp.getSetting('includeStories') && parent.hasField('UserStories') &&
-                    (parent.get('UserStories').Count > 0) ) {  
-                    collectionConfig.fetch.push(gApp._getModelFromOrd(0).split("/").pop()); //Add the lowest level field on User Stories
-                    parent.getCollection( 'UserStories').load( Ext.clone(collectionConfig) );
-                } 
-                //If we are storeis, then we need to fetch Defects
-                if (gApp.getSetting('includeDefects') && parent.hasField('Defects') &&
-                    (parent.get('Defects').Count > 0) ) {  
-                    collectionConfig.fetch.push('Requirement'); //Add the User Story not the Test Case
-                    parent.getCollection( 'Defects').load( Ext.clone(collectionConfig) );
-                } 
-                //If we are defects or storeis, then we need to fetch Tasks
-                
-                if (gApp.getSetting('includeTasks') && parent.hasField('Tasks') &&
-                        (parent.get('Tasks').Count > 0) ) {  
-                    collectionConfig.fetch.push('WorkProduct'); //Add the User Story not the Test Case
-                    parent.getCollection( 'Tasks').load( Ext.clone(collectionConfig) );
-                } 
-                if (gApp.getSetting('includeTestCases') && parent.hasField('TestCases')  &&
-                        (parent.get('TestCases').Count > 0) ) {  
-                    collectionConfig.fetch.push('WorkProduct'); //Add the User Story not the Test Case
-                    parent.getCollection( 'TestCases').load( Ext.clone(collectionConfig) );
-                } 
-                // //If we are userstories, then we need to fetch tasks
-                // else if (parent.hasField('Tasks') && (gApp.getSetting('includeStories'))){
-                //     parent.getCollection( 'Tasks').load( collectionConfig );                    
-                // }
-            }
-        });
-    },
-
+    
     //Set the SVG area to the surface we have provided
     _setSVGSize: function(surface) {
         var svg = d3.select('svg');
