@@ -9,7 +9,8 @@
         "CFDChart.js",
         "CFDCalc.js",
         "d3.js",
-        "exporter.js"
+        "exporter.js",
+        "worker.js"
     ],
     "css": [
         "app.css"

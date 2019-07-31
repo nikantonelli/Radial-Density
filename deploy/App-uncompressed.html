@@ -7,173 +7,10 @@
 
     <script type="text/javascript">
         Rally.onReady(function () {
-                (function () {
+                
+
+(function () {
     var Ext = window.Ext4 || window.Ext;
-
-    Ext.define('Ext.data.MyConnection', {
-    override: 'Ext.data.Connection',
-    mixins: {
-        observable:  Ext.util.Observable 
-    },
-    
-               
-                                  
-      
-
-    statics: {
-        requestId: 0
-    },
-
-    url: null,
-    async: true,
-    method: null,
-    username: 'trash@acme.com',
-    password: 'NotSet',
-
-    
-    disableCaching: true,
-
-    
-    withCredentials: false,
-
-    
-    binary: false,
-
-    
-    cors: false,
-
-    isXdr: false,
-
-    defaultXdrContentType: 'text/plain',
-
-    
-    disableCachingParam: '_dc',
-    timeout : 150000,
-    queue: [],    
-
-    useDefaultHeader : true,
-    defaultPostHeader : 'application/x-www-form-urlencoded; charset=UTF-8',
-    useDefaultXhrHeader : true,
-    defaultXhrHeader : 'XMLHttpRequest',
-
-    constructor : function(config) {
-        config = config || {};
-        Ext.apply(this, config);
-        sendQueues[0] = [];
-        sendQueues[1] = [];
-        this.requests = {};
-        this.mixins.observable.constructor.call(this);
-        console.log(this);
-    },
-
-
-    onStateChange : function(request, xdrResult) {
-        var me = this;
-
-        
-        if ((request.xhr && request.xhr.readyState == 4) || me.isXdr) {
-            me.clearTimeout(request);
-            me.onComplete(request, xdrResult);
-            me.cleanup(request);
-            me.checkQueue();
-            Ext.EventManager.idleEvent.fire();
-        }
-    },
-    
-    request : function(options) {
-        options = options || {};
-        var me = this,
-            scope = options.scope || window,
-            username = options.username || me.username,
-            password = options.password || me.password || '',
-            async,
-            requestOptions,
-            request,
-            headers,
-            xhr;
-        if (me.fireEvent('beforerequest', me, options) !== false) {
-
-            requestOptions = me.setOptions(options, scope);
-
-            if (me.isFormUpload(options)) {
-                me.upload(options.form, requestOptions.url, requestOptions.data, options);
-                return null;
-            }
-
-            
-            if (options.autoAbort || me.autoAbort) {
-                me.abort();
-            }
-
-            
-            async = options.async !== false ? (options.async || me.async) : false;
-            xhr = me.openRequest(options, requestOptions, async, username, password);
-
-            
-            if (!me.isXdr) {
-                headers = me.setupHeaders(xhr, options, requestOptions.data, requestOptions.params);
-            }
-
-            
-            request = {
-                id: ++Ext.data.Connection.requestId,
-                xhr: xhr,
-                headers: headers,
-                options: options,
-                async: async,
-                binary: options.binary || me.binary,
-                timeout: setTimeout(function() {
-                    request.timedout = true;
-                    me.abort(request);
-                },  me.timeout)
-            };
-
-            if ( Object.keys(me.requests).length <512) {
-                return me.sendRequest(request, requestOptions.data);
-            }
-            else {
-                me.queue.push( {
-                    rdata : requestOptions.data,
-                    req : request
-                });
-            }
-        } else {
-            Ext.callback(options.callback, options.scope, [options, undefined, undefined]);
-            return null;
-        }
-    },
-
-    checkQueue: function() {
-        var me = this;
-        if (me.queue.length > 0) {
-             var xhrreq = me.queue.pop();
-             me.sendRequest(xhrreq.req, xhrreq.rdata);
-        }
-    },
-
-    sendRequest: function(request, reqData) {
-        var me = this;
-        me.requests[request.id] = request;
-        me.latestId = request.id;
-        
-        if (request.async) {
-            if (!me.isXdr) {
-                request.xhr.onreadystatechange = Ext.Function.bind(me.onStateChange, me, [request]);
-            }
-        }
-
-        if (me.isXdr) {
-            me.processXdrRequest(request, request.xhr);
-        }
-
-        request.xhr.send(reqData);
-        if (!request.async) {
-            return me.onComplete(request);
-        }
-        return request;
-    }
-});
-
 
 Ext.define('Rally.app.RadialDensity.app', {
     extend: 'Rally.app.App',
@@ -181,9 +18,9 @@ Ext.define('Rally.app.RadialDensity.app', {
     config: {
         defaultSettings: {
             includeStories: true,
-            includeDefects: true,
-            includeTasks: true,
-            includeTestCases: true,
+            includeDefects: false,
+            includeTasks: false,
+            includeTestCases: false,
             usePreliminaryEstimate: true,
             hideArchived: false,
             sizeStoriesByPlanEstimate: false,
@@ -208,6 +45,10 @@ Ext.define('Rally.app.RadialDensity.app', {
                 FormattedID: 'R0'
             }
         }
+    },
+
+    statics: {
+        MAX_THREAD_COUNT: 2,
     },
 
     autoScroll: true,
@@ -258,7 +99,7 @@ Ext.define('Rally.app.RadialDensity.app', {
         'Ordinal',
         'Release',
         'Iteration',
-        'Milestones',
+//        'Milestones',
         'UserStories',
         'Defects',
         'Tasks',
@@ -593,13 +434,13 @@ CARD_DISPLAY_FIELD_LIST:
 //            filters: gApp._filterInfo.filters,
 //            models: gApp._filterInfo.types,
             autoLoad: true,
-            filters: [
-                {
-                    property: 'Parent.Parent.OriginatingID',
-                    operator: '!=',
-                    value: null
-                }
-            ],
+            // filters: [
+            //     {
+            //         property: 'Parent.Parent.OriginatingID',
+            //         operator: '!=',
+            //         value: null
+            //     }
+            // ],
             fetch: gApp.STORE_FETCH_FIELD_LIST,
             pageSize: 2000,
             limit: Infinity,
@@ -892,16 +733,103 @@ CARD_DISPLAY_FIELD_LIST:
         });
     },
     
-    _getArtifacts: function(data) {
+    recordsToProcess: [],
+    runningThreads: [],
+    lastThreadID: 0,
+
+    _threadCreate: function() {
+        var wrkr = new Worker("worker.js");
+        console.log("Created worker: ", wrkr);
+        var thread = {
+            worker: wrkr,
+            state: 'Initiate',
+            id: ++gApp.lastThreadID,
+            context: gApp
+        }
+        
+        gApp.runningThreads.push(thread);
+        wrkr.onmessage = gApp._threadMessage;
+    },
+
+    _checkThreadState: function(thread) {
+        return thread.state;
+    },
+
+    _wakeThread: function(thread) {
+        if ( gApp._checkThreadState(thread) === 'Asleep') {  //False = thread asleep
+            thread.worker.postMessage({
+                msg: 'wake'
+            });
+        }
+    },
+
+    _checkThreadActivity: function() {
+        while (gApp.runningThreads.length < gApp.self.MAX_THREAD_COUNT) {
+            //Check the required amount of threads are still running
+            gApp._threadCreate();
+        }
+
+        debugger;
+        _.each(gApp.runningThreads, function(thread) {
+            if ((gApp.recordsToProcess.length > 0) && (thread.state === 'Asleep')) {
+                gApp._wakeThread(thread);
+            }
+        });
+    },
+
+    _giveToThread: function(thread, msg){
+        debugger;
+        thread.worker.postMessage(msg)
+    },
+
+    _threadReadRecord: function(thread, record) {
+        gApp._giveToThread(thread, {
+            msg: 'read',
+            record: record
+        });    //Send a wakeup message with an item
+    },
+
+    _getArtifacts: function(records) {
+        _.each(records, function(record) {
+            gApp.recordsToProcess.push(record);
+        });
+        gApp._checkThreadActivity();
+    },
+
+    //This is in the context of the worker thread even though the code is here
+    _threadMessage: function(msg) {
+        debugger;
+        if ((msg.data.response === 'Alive') && (msg.data.state === 'Asleep')) {
+            console.log('Thread ' + msg.data.id + ' responded');
+        } else if (msg.data.state === 'Initiate') { 
+            gApp._giveToThread(thread, {
+                msg: 'create',
+                thread: thread
+            });
+        }
+        else if (msg.data.state === 'Asleep') { 
+            if (gApp.recordsToProcess.length > 0) {
+                //We have some, so give to a thread
+                debugger;
+
+            }
+        }
+    },
+    
+    _fetchTheData: function(data) {
         console.log('Loading ', data.length, ' artefacts');
         gApp.setLoading("Loading artefacts..");
-
+debugger;
+        if (gApp.getSetting('fetchAttachments') === true) {
+            gApp._getAttachments(data);
+        }
         //On re-entry send an event to redraw
         gApp._nodes = gApp._nodes.concat( gApp._createNodes(data));    //Add what we started with to the node list
         this.fireEvent('redrawTree');
         //Starting with highest selected by the combobox, go down
 
         _.each(data, function(parent) {
+            console.log("processing item: " + parent.get('FormattedID'));
             //Limit this to portfolio items down to just above feature level and not beyond.
             //The lowest level portfolio item type has 'UserStories' not 'Children'
             if (parent.hasField('Children') && 
@@ -918,9 +846,6 @@ CARD_DISPLAY_FIELD_LIST:
                         //Start the recursive trawl down through the levels
                         if (success && records.length)  {
                             gApp._getArtifacts(records);
-                            if (gApp.getSetting('fetchAttachments') === true) {
-                                gApp._getAttachments(records);
-                            }
                         }
                     }
                 };
@@ -944,11 +869,7 @@ CARD_DISPLAY_FIELD_LIST:
                     callback: function(records, operation, s) {
                         if (s && records && records.length) {
                             gApp._getArtifacts(records);
-                            gApp.fireEvent('redrawTree');
-                            
-                            if (gApp.getSetting('fetchAttachments') === true) {
-                                gApp._getAttachments(records);
-                            }    
+                            gApp.fireEvent('redrawTree');  
                         }
                     }
                 };
@@ -19383,6 +19304,31 @@ Object.defineProperty(exports, '__esModule', { value: true });
             return null;
     }
 });
+                var id = 0;
+var context = 0;
+var currentState = 'Initiate';
+
+onmessage = function(ev) {
+    debugger;
+    console.log('Worker received: ',ev);
+    if (ev.data.msg === 'wake') {
+        defaultReply();
+    } else if (ev.data.msg === 'create') {
+        console.log('Worker received ', ev.data);
+        this.context = ev.data.context;
+        this.id = ev.data.id;
+    } else {
+        this.console.log('Unknown message received by: ', this);
+    }
+};
+
+function defaultReply() {
+    postMessage({
+        response: 'Alive',
+        state: this.currentState,
+        id: this.id
+    })
+}
 
             Rally.launchApp('Rally.app.RadialDensity.app', {
                 name:"Radial Density Map",

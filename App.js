@@ -1,3 +1,5 @@
+
+
 (function () {
     var Ext = window.Ext4 || window.Ext;
 
@@ -7,9 +9,9 @@ Ext.define('Rally.app.RadialDensity.app', {
     config: {
         defaultSettings: {
             includeStories: true,
-            includeDefects: true,
-            includeTasks: true,
-            includeTestCases: true,
+            includeDefects: false,
+            includeTasks: false,
+            includeTestCases: false,
             usePreliminaryEstimate: true,
             hideArchived: false,
             sizeStoriesByPlanEstimate: false,
@@ -34,6 +36,10 @@ Ext.define('Rally.app.RadialDensity.app', {
                 FormattedID: 'R0'
             }
         }
+    },
+
+    statics: {
+        MAX_THREAD_COUNT: 2,
     },
 
     autoScroll: true,
@@ -419,13 +425,13 @@ CARD_DISPLAY_FIELD_LIST:
 //            filters: gApp._filterInfo.filters,
 //            models: gApp._filterInfo.types,
             autoLoad: true,
-            filters: [
-                {
-                    property: 'Parent.Parent.OriginatingID',
-                    operator: '!=',
-                    value: null
-                }
-            ],
+            // filters: [
+            //     {
+            //         property: 'Parent.Parent.OriginatingID',
+            //         operator: '!=',
+            //         value: null
+            //     }
+            // ],
             fetch: gApp.STORE_FETCH_FIELD_LIST,
             pageSize: 2000,
             limit: Infinity,
@@ -718,20 +724,103 @@ CARD_DISPLAY_FIELD_LIST:
         });
     },
     
+    recordsToProcess: [],
+    runningThreads: [],
+    lastThreadID: 0,
+
+    _threadCreate: function() {
+        var wrkr = new Worker("worker.js");
+        console.log("Created worker: ", wrkr);
+        var thread = {
+            worker: wrkr,
+            state: 'Initiate',
+            id: ++gApp.lastThreadID,
+            context: gApp
+        };
+        
+        gApp.runningThreads.push(thread);
+        wrkr.onmessage = gApp._threadMessage;
+    },
+
+    _checkThreadState: function(thread) {
+        return thread.state;
+    },
+
+    _wakeThread: function(thread) {
+        if ( gApp._checkThreadState(thread) === 'Asleep') {  //False = thread asleep
+            thread.worker.postMessage({
+                msg: 'wake'
+            });
+        }
+    },
+
+    _checkThreadActivity: function() {
+        while (gApp.runningThreads.length < gApp.self.MAX_THREAD_COUNT) {
+            //Check the required amount of threads are still running
+            gApp._threadCreate();
+        }
+
+        debugger;
+        _.each(gApp.runningThreads, function(thread) {
+            if ((gApp.recordsToProcess.length > 0) && (thread.state === 'Asleep')) {
+                gApp._wakeThread(thread);
+            }
+        });
+    },
+
+    _giveToThread: function(thread, msg){
+        debugger;
+        thread.worker.postMessage(msg);
+    },
+
+    _threadReadRecord: function(thread, record) {
+        gApp._giveToThread(thread, {
+            msg: 'read',
+            record: record
+        });    //Send a wakeup message with an item
+    },
+
     _getArtifacts: function(records) {
-    
+        _.each(records, function(record) {
+            gApp.recordsToProcess.push(record);
+        });
+        gApp._checkThreadActivity();
+    },
+
+    //This is in the context of the worker thread even though the code is here
+    _threadMessage: function(msg) {
+        debugger;
+        if ((msg.data.response === 'Alive') && (msg.data.state === 'Asleep')) {
+            console.log('Thread ' + msg.data.id + ' responded');
+        } else if (msg.data.state === 'Initiate') { 
+            gApp._giveToThread(thread, {
+                msg: 'create',
+                thread: thread
+            });
+        }
+        else if (msg.data.state === 'Asleep') { 
+            if (gApp.recordsToProcess.length > 0) {
+                //We have some, so give to a thread
+                debugger;
+
+            }
+        }
     },
     
     _fetchTheData: function(data) {
         console.log('Loading ', data.length, ' artefacts');
         gApp.setLoading("Loading artefacts..");
-
+debugger;
+        if (gApp.getSetting('fetchAttachments') === true) {
+            gApp._getAttachments(data);
+        }
         //On re-entry send an event to redraw
         gApp._nodes = gApp._nodes.concat( gApp._createNodes(data));    //Add what we started with to the node list
         this.fireEvent('redrawTree');
         //Starting with highest selected by the combobox, go down
 
         _.each(data, function(parent) {
+            console.log("processing item: " + parent.get('FormattedID'));
             //Limit this to portfolio items down to just above feature level and not beyond.
             //The lowest level portfolio item type has 'UserStories' not 'Children'
             if (parent.hasField('Children') && 
@@ -748,9 +837,6 @@ CARD_DISPLAY_FIELD_LIST:
                         //Start the recursive trawl down through the levels
                         if (success && records.length)  {
                             gApp._getArtifacts(records);
-                            if (gApp.getSetting('fetchAttachments') === true) {
-                                gApp._getAttachments(records);
-                            }
                         }
                     }
                 };
@@ -774,11 +860,7 @@ CARD_DISPLAY_FIELD_LIST:
                     callback: function(records, operation, s) {
                         if (s && records && records.length) {
                             gApp._getArtifacts(records);
-                            gApp.fireEvent('redrawTree');
-                            
-                            if (gApp.getSetting('fetchAttachments') === true) {
-                                gApp._getAttachments(records);
-                            }    
+                            gApp.fireEvent('redrawTree');  
                         }
                     }
                 };
