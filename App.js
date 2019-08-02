@@ -143,8 +143,16 @@ CARD_DISPLAY_FIELD_LIST:
         }
     ],
 
-    onSettingsUpdate: function() {
-        this._redrawTree();
+    onSettingsUpdate: function(newSettings) {
+        // debugger;
+        // if (( newSettings.includeDefects !== this.settings.includeDefects) ||
+        //     ( newSettings.includeTasks !== this.settings.includeTasks) ||
+        //     ( newSettings.includeStories !== this.settings.includeStories) ||
+        //     ( newSettings.includeTesCases !== this.settings.includeTesCases)
+        // ) {
+            gApp._loadStoreLocal();
+        // }
+        // this._redrawTree();
     },
 
     getSettingsFields: function() {
