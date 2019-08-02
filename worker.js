@@ -3,6 +3,7 @@ function worker() {
     var id = 0;
     var currentState = 'Initiate';
     var timeout = 120000;
+    var fetchFields = 'true';
 
 
     onmessage = function(ev) {
@@ -17,6 +18,8 @@ function worker() {
                 console.log('Worker received ', ev.data);
                 this.id = ev.data.id;
                 currentState = 'Asleep';
+                fetchFields = encodeURIComponent(ev.data.fields.toString());
+                this.console.log(fetchFields);
                 defaultReply();
                 break;
             } 
@@ -50,7 +53,7 @@ function worker() {
         getReq.onreadystatechange = _successHandler;
         getReq.withCredentials = true;
         currentState = 'Reading';
-        getReq.open("GET", url, true);
+        getReq.open("GET", url + '?fetch=' + fetchFields, true);
         getReq.send(null);
         return true;
     }

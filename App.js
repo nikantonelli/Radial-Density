@@ -99,7 +99,8 @@ Ext.define('Rally.app.RadialDensity.app', {
         'UserStories',
         'Defects',
         'Tasks',
-        'TestCases'
+        'TestCases',
+        'LastVerdict',
         //Customer specific after here. Delete as appropriate
 //        'c_ProjectIDOBN',
 //        'c_QRWP',
@@ -243,15 +244,8 @@ CARD_DISPLAY_FIELD_LIST:
     timer: null,
 
     launch: function() {
-        this.on({
-            redrawTree: { fn: this._resetTimer, scope: this, buffer: 1000}
-        });
+        
         this.exporter = Ext.create("TreeExporter");
-    },
-
-    _resetTimer: function() {
-        if ( this.timer) clearTimeout(this.timer);
-        this.timer = setTimeout(this._redrawTree, 500);
     },
     
     _redrawTree: function() {
@@ -463,8 +457,13 @@ CARD_DISPLAY_FIELD_LIST:
             listeners: {
                 load: function( store, records, success) {
                     gApp._nodes = [ gApp.WorldViewNode ];
-                    gApp.setLoading("Loading artefacts....");
-                    gApp._getArtifacts(records);
+                    if (records.length > 0) {
+                        gApp.setLoading("Loading artefacts....");
+                        gApp._getArtifacts(records);
+                    }
+                    else {
+                        Rally.ui.notify.Notifier.show({message: 'No Artefacts to fetch'});
+                    }
                 }
             }
         });
@@ -777,6 +776,7 @@ CARD_DISPLAY_FIELD_LIST:
         gApp._giveToThread(thread, {
             command: 'initialise',
             id: thread.id,
+            fields: gApp.STORE_FETCH_FIELD_LIST.concat([gApp._getModelFromOrd(0).split("/").pop()])
         });
     },
 
@@ -975,7 +975,9 @@ CARD_DISPLAY_FIELD_LIST:
 
                     if (!gApp._dataCheckForItem(d)) {
                         lClass.push( "error--node");    
-                    }else {                    
+                    }else { 
+                        
+                        //NB: Some fields can have a null entry. That needs to be taken care of here!
                         if (d.data.record.isUserStory()) { 
                             lClass.push(gApp.settings.colourScheme  + (_.find (gApp._storyStates, { 'name' : d.data.record.get('ScheduleState') })).value + '-' + gApp._storyStates.length);
                             lClass.push(d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"");
@@ -985,7 +987,6 @@ CARD_DISPLAY_FIELD_LIST:
                             lClass.push(d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"");
                         }
                         else if (d.data.record.isPortfolioItem()) {
-                            //Predecessors take precedence
                             if (d.data.record.get('State')){
                                 lClass.push( gApp.settings.colourScheme + ((d.data.record.get('State').OrderIndex-1) + '-' + gApp.numStates[gApp._getOrdFromModel(d.data.record.get('_type'))]));
                             } else {
@@ -996,8 +997,18 @@ CARD_DISPLAY_FIELD_LIST:
                             lClass.push(gApp.settings.colourScheme  + (_.find (gApp._taskStates, { 'name' : d.data.record.get('State') })).value + '-' + gApp._taskStates.length);
                             lClass.push(d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"");
                         }
+                        else if (d.data.record.isTestCase()) {
+                            if (d.data.record.get('LastVerdict')) {
+                                lClass.push(gApp.settings.colourScheme  + (_.find (gApp._tcStates, { 'name' : d.data.record.get('LastVerdict') })).value + '-' + gApp._tcStates.length);
+                            }
+                            else {
+                                lClass.push(gApp.settings.colourScheme  + '0' + '-' + gApp._tcStates.length);
+                            }
+                            lClass.push(d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"");
+                        }
+                            //Predecessors take precedence
                         if (d.data.record.get('Predecessors') && (d.data.record.get('Predecessors').Count > 0)) {
-                          if (gApp.getSetting('flashDeps')) lClass.push("gotPredecessors");
+                            if (gApp.getSetting('flashDeps')) lClass.push("gotPredecessors");
                             gApp._fetchPredecessors(d);
                         }
                         else if (d.data.record.get('Successors') && (d.data.record.get('Successors').Count > 0)) {
@@ -1690,10 +1701,5 @@ CARD_DISPLAY_FIELD_LIST:
         
         colours.attr("visibility","hidden");    //Render, but mask it. Use "visible" to show again
     },
-
-    initComponent: function() {
-        this.callParent(arguments);
-        this.addEvents('redrawTree');
-    }
 });
 }());
