@@ -755,7 +755,15 @@ CARD_DISPLAY_FIELD_LIST:
     lastThreadID: 0,
 
     _threadCreate: function() {
-        var wrkr = new Worker("worker.js");
+
+        var workerScript = worker.toString();
+        //Strip tail
+        workerScript = workerScript.substring(workerScript.indexOf("{") + 1, workerScript.lastIndexOf("}"));
+        var workerBlob = new Blob([workerScript],
+            {
+                type: "application/javascript"
+            });
+        var wrkr = new Worker(URL.createObjectURL(workerBlob));
         console.log("Created worker: ", wrkr);
         var thread = {
             lastCommand: '',
@@ -792,7 +800,8 @@ CARD_DISPLAY_FIELD_LIST:
         }
         _.each(gApp.runningThreads, function(thread) {
             if ((gApp.recordsToProcess.length > 0) && (thread.state === 'Asleep')) {
-                gApp._threadReadChildren(thread,gApp.recordsToProcess.pop());
+                //Keep asking to process until their is somethng that needs doing
+                gApp._processRecord(thread,gApp.recordsToProcess.pop());
             }
         });
 
@@ -803,7 +812,7 @@ CARD_DISPLAY_FIELD_LIST:
         thread.worker.postMessage(msg);
     },
 
-    _threadReadChildren: function(thread, record) {
+    _processRecord: function(thread, record) {
         thread.lastCommand = 'readchildren';
         var msg = {
             command: thread.lastCommand,
@@ -820,9 +829,7 @@ CARD_DISPLAY_FIELD_LIST:
                 Rally.util.Ref.getUrl(record.get('TestCases')._ref):null,
 
         };
-        if (( msg.hasChildren || msg.hasDefects || msg.hasStories || msg.hasTasks || msg.hasTestCases)){
-            gApp._giveToThread(thread, msg);    //Send a wakeup message with an item
-        }
+        gApp._giveToThread(thread, msg);    //Send a wakeup message with an item
     },
 
     _getArtifacts: function(records) {
@@ -877,7 +884,7 @@ CARD_DISPLAY_FIELD_LIST:
         //Farm out more if needed
         if (gApp.recordsToProcess.length > 0) {
             //We have some, so give to a thread
-            gApp._threadReadChildren(thread, gApp.recordsToProcess.pop());
+            gApp._processRecord(thread, gApp.recordsToProcess.pop());
         }
         else {
             gApp.setLoading("Calculating plot....");
