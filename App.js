@@ -1,5 +1,3 @@
-
-
 (function () {
     var Ext = window.Ext4 || window.Ext;
 
@@ -39,8 +37,15 @@ Ext.define('Rally.app.RadialDensity.app', {
     },
 
     statics: {
-        MAX_THREAD_COUNT: 2,
+        MAX_THREAD_COUNT: 128,  //More memory and more network usage the higher you go.
     },
+
+    _defectModel: null,
+    _userStoryModel: null,
+    _taskModel: null,
+    _testCaseModel: null,
+    _portfolioItemModels: {},
+
 
     autoScroll: true,
     itemId: 'rallyApp',
@@ -242,7 +247,6 @@ CARD_DISPLAY_FIELD_LIST:
     },
     
     _redrawTree: function() {
-        gApp.setLoading(false);
         if (gApp.down('#loadingBox')) gApp.down('#loadingBox').destroy();
         clearTimeout(gApp.timer);
         if (gApp._nodeTree) {
@@ -316,6 +320,7 @@ CARD_DISPLAY_FIELD_LIST:
             Rally.data.ModelFactory.getModel({
                 type: 'UserStory',
                 success: function(model) {
+                    gApp._userStoryModel = model;
                     _.each(model.getField('ScheduleState').attributeDefinition.AllowedValues, function(value,idx) {
                         gApp._storyStates.push( { name: value.StringValue, value : idx});
                     });
@@ -324,6 +329,7 @@ CARD_DISPLAY_FIELD_LIST:
             Rally.data.ModelFactory.getModel({
                 type: 'Defect',
                 success: function(model) {
+                    gApp._defectModel = model;
                     _.each(model.getField('ScheduleState').attributeDefinition.AllowedValues, function(value,idx) {
                         gApp._defectStates.push( { name: value.StringValue, value : idx});
                     });
@@ -332,6 +338,7 @@ CARD_DISPLAY_FIELD_LIST:
             Rally.data.ModelFactory.getModel({
                 type: 'Task',
                 success: function(model) {
+                    gApp._taskModel = model;
                     _.each(model.getField('State').attributeDefinition.AllowedValues, function(value,idx) {
                         gApp._taskStates.push( { name: value.StringValue, value : idx});
                     });
@@ -340,6 +347,7 @@ CARD_DISPLAY_FIELD_LIST:
             Rally.data.ModelFactory.getModel({
                 type: 'TestCase',
                 success: function(model) {
+                    gApp._testCaseModel = model;
                     _.each(model.getField('LastVerdict').attributeDefinition.AllowedValues, function(value,idx) {
                         gApp._tcStates.push( { name: value.StringValue, value : idx});
                     });
@@ -367,16 +375,25 @@ CARD_DISPLAY_FIELD_LIST:
                             storeConfig: {
                                 fetch: ['DisplayName', 'ElementName','Ordinal','Name','TypePath', 'Attributes'],
                                 listeners: {
-                                    load: function(store) {
+                                    load: function(store,records) {
                                         gApp._typeStore = store;
                                         gApp._addFilterPanel();
                                         gApp._addColourHelper();
                                         gApp._addButtons();
-                                        gApp.down('#piType').on ({
-                                            select: function() { 
-//                                                gApp._kickOff();
-                                            }
+                                        // Load the models into our app
+                                        _.each(records, function(modeltype) {
+                                            Rally.data.ModelFactory.getModel({
+                                                type: modeltype.get('TypePath'),
+                                                success: function(model) {
+                                                    gApp._portfolioItemModels[modeltype.get('Name')] = model;
+                                                }
+                                            });
                                         });
+//                                        gApp.down('#piType').on ({
+//                                            select: function() { 
+//                                                gApp._kickOff();
+//                                            }
+//                                        });
                                     }
                                 }
                             },
@@ -438,6 +455,7 @@ CARD_DISPLAY_FIELD_LIST:
             listeners: {
                 load: function( store, records, success) {
                     gApp._nodes = [ gApp.WorldViewNode ];
+                    gApp.setLoading("Loading artefacts....");
                     gApp._getArtifacts(records);
                 }
             }
@@ -766,18 +784,20 @@ CARD_DISPLAY_FIELD_LIST:
         }
         _.each(gApp.runningThreads, function(thread) {
             if ((gApp.recordsToProcess.length > 0) && (thread.state === 'Asleep')) {
-                gApp._wakeThread(thread);
+                gApp._threadReadChildren(thread,gApp.recordsToProcess.pop());
             }
         });
+
     },
 
     _giveToThread: function(thread, msg){
+        thread.state = 'Busy';
         thread.worker.postMessage(msg);
     },
 
     _threadReadChildren: function(thread, record) {
         thread.lastCommand = 'readchildren';
-        gApp._giveToThread(thread, {
+        var msg = {
             command: thread.lastCommand,
             objectID: record.get('ObjectID'),
             hasChildren: (record.hasField('Children') && (record.get('Children').Count > 0) && (!record.data._ref.includes('hierarchicalrequirement'))) ?
@@ -791,7 +811,10 @@ CARD_DISPLAY_FIELD_LIST:
             hasTestCases:(gApp.getSetting('includeTestCases') && record.hasField('TestCases')  && (record.get('TestCases').Count > 0) ) ?
                 Rally.util.Ref.getUrl(record.get('TestCases')._ref):null,
 
-        });    //Send a wakeup message with an item
+        };
+        if (( msg.hasChildren || msg.hasDefects || msg.hasStories || msg.hasTasks || msg.hasTestCases)){
+            gApp._giveToThread(thread, msg);    //Send a wakeup message with an item
+        }
     },
 
     _getArtifacts: function(records) {
@@ -804,19 +827,55 @@ CARD_DISPLAY_FIELD_LIST:
 
     //This is in the context of the worker thread even though the code is here
     _threadMessage: function(msg) {
-        if ((msg.data.response === 'Alive') && (msg.data.state === 'Asleep')) {
+        if ((msg.data.response === 'Alive') && (msg.data.reply === 'Asleep')) {
             //TODO: Add timeout control here. If the process is busy, it will not return Asleep, but will be Alive.
             // console.log('Thread ' + msg.data.id + ' responded to ping');
         } 
 
-        if (msg.data.state === 'Asleep') { 
-            if (gApp.recordsToProcess.length > 0) {
-                //We have some, so give to a thread
-                var thread = _.find(gApp.runningThreads, { id: msg.data.id});
-                gApp._threadReadChildren(thread, gApp.recordsToProcess.pop());
-            }
+        //Records come back as raw info. We need to make proper Rally.data.WSAPI.Store records out of them
+        if (msg.data.reply === 'Data') {
+            var records = [];
+
+            _.each(msg.data.records, function(item) {
+                switch (item._type) {
+                    case 'HierarchicalRequirement' : {
+                        records.push(Ext.create(gApp._userStoryModel, item));
+                        break;
+                    }
+                    case 'Defect' : {
+                        records.push(Ext.create(gApp._defectModel, item));
+                        break;
+                    }
+                    case 'Task' : {
+                        records.push(Ext.create(gApp._taskModel, item));
+                        break;
+                    }
+                    case 'TestCase' : {
+                        records.push(Ext.create(gApp._testCaseModel, item));
+                        break;
+                    }
+                    default: {
+                        //Portfolio Item
+                        records.push(Ext.create(gApp._portfolioItemModels[item._type.split('/').pop()], item));
+                        break;
+                    }
+                }
+            });
+            gApp._getArtifacts(records);
+            
         }
-    },
+        var thread = _.find(gApp.runningThreads, { id: msg.data.id});
+        thread.state = 'Asleep';
+        //Farm out more if needed
+        if (gApp.recordsToProcess.length > 0) {
+            //We have some, so give to a thread
+            gApp._threadReadChildren(thread, gApp.recordsToProcess.pop());
+        }
+        else {
+            gApp.setLoading("Calculating plot....");
+            gApp._redrawTree();
+        }
+},
     
     
     //Set the SVG area to the surface we have provided
@@ -950,10 +1009,11 @@ CARD_DISPLAY_FIELD_LIST:
                     return "translate(" + arc.centroid(d) + ") rotate(" + (angle < Math.PI ? angle - Math.PI / 2 : angle + Math.PI / 2) * 180 / Math.PI + ")"; })
                 .text(function(d) { return d.data.Name; });
         }
+        gApp.setLoading(false);
 
-        // Stash the old values for transition.
     },
 
+    // Stash the old values for transition.
     stash: function (d) {
         d.x0s = d.x0;
         d.y0s = d.y0;
