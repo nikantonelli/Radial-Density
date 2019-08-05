@@ -1020,6 +1020,7 @@ _allThreadsIdle: function() {
     },
     
     _nodeMouseOut: function(node, index,array){
+        // if (node.card && !document.getElementById(node.card.id).contains(event.toElement)) node.card.hide();
         if (node.card) node.card.hide();
     },
 
@@ -1043,15 +1044,18 @@ _allThreadsIdle: function() {
                     listeners: {
                         show: function(card){
                             //Move card to the centre of the screen
-                            var pos = arc.centroid(node);
-                            var xpos = array[index].getScreenCTM().e + pos[0];
-                            var ypos = array[index].getScreenCTM().f + pos[1];
-                            card.el.setLeftTop( (xpos - gApp.MIN_CARD_WIDTH) < 0 ? xpos + gApp.MIN_CARD_WIDTH + gApp.MIN_COLUMN_WIDTH : xpos - gApp.MIN_CARD_WIDTH, 
-                                (ypos + this.getSize().height)> gApp.getSize().height ? gApp.getSize().height - (this.getSize().height+20) : ypos);  //Tree is rotated
+//                            var pos = arc.centroid(node);
+                            var xpos = event.x;
+                            var ypos = event.y;
+//                            var xpos = array[index].getScreenCTM().e + pos[0];
+//                            var ypos = array[index].getScreenCTM().f + pos[1];
+                            card.el.setLeftTop( (xpos - gApp.MIN_CARD_WIDTH) < 0 ? xpos + gApp.MIN_CARD_WIDTH  : xpos - gApp.MIN_CARD_WIDTH, 
+                                (ypos + (Math.max(this.getSize().height,20))> gApp.getSize().height ? ypos - (this.getSize().height + 20) : ypos+20));  //Tree is rotated
                         }
                     }
                 });
                 node.card = card;
+                //Ext.util.Observable.capture( card, function(event) { console.log(event, arguments);});
             }
             node.card.show();
         }
