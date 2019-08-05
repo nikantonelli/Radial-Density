@@ -136,7 +136,6 @@ CARD_DISPLAY_FIELD_LIST:
         {
             xtype: 'container',
             itemId: 'rootSurface',
-            margin: '5 5 5 5',
             layout: 'auto',
             autoEl: {
                 tag: 'svg'
@@ -276,21 +275,22 @@ CARD_DISPLAY_FIELD_LIST:
        //Get all the nodes and the "Unknown" parent virtual nodes
        var nodetree = gApp._createTree(gApp._nodes);
        gApp._nodeTree = nodetree;
-        var viewBoxSize = [ 1200,800 ];
+       
+        var viewBoxSize = Math.min(this.getSize().width, this.getSize().height - gApp.down('#headerBox').getSize().height);
         gApp._setViewBox(viewBoxSize);
 
         //Add a group for the tree of artefacts
         var t = d3.select('svg').append('g')
             .attr('id','tree')
             //Transform to the centre of the screen
-            .attr("transform","translate(" + viewBoxSize[0]/2 + "," + viewBoxSize[1]/2 + ")");
+            .attr("transform","translate(" + viewBoxSize/2 + "," + viewBoxSize/2 + ")");
 
         //Add in an overlay if the user wants to see dependencies
         d3.select('svg').append('g')
             .attr('id','depsOverlay')
             .attr("visibility", "hidden")
             //Transform to the centre of the screen
-            .attr("transform","translate(" + viewBoxSize[0]/2 + "," + viewBoxSize[1]/2 + ")");
+            .attr("transform","translate(" + viewBoxSize/2 + "," + viewBoxSize/2 + ")");
         
         gApp._refreshTree(viewBoxSize);    //Need to redraw if things are added
     },
@@ -865,13 +865,13 @@ _allThreadsIdle: function() {
     _setViewBox: function(viewBoxSize) {
        var svg = d3.select('svg');
         var rs = this.down('#rootSurface');
-        rs.getEl().setWidth(viewBoxSize[0]);
-        rs.getEl().setHeight(viewBoxSize[1]);
+        rs.getEl().setWidth(viewBoxSize);
+        rs.getEl().setHeight(viewBoxSize);
         //Set the svg area to the surface
        this._setSVGSize(rs);
         svg.attr('class', 'rootSurface');
         svg.attr('preserveAspectRatio', 'none');
-        svg.attr('viewBox', '0 0 ' + viewBoxSize[0] + ' ' + viewBoxSize[1]);
+        svg.attr('viewBox', '0 0 ' + viewBoxSize + ' ' + viewBoxSize);
     },
 
     inoid: function(d) { 
@@ -881,7 +881,7 @@ _allThreadsIdle: function() {
     },
 
     _refreshTree: function(viewBoxSize){
-        var width = viewBoxSize[0], height = viewBoxSize[1], radius = Math.min(width, height)/2;
+        var radius = viewBoxSize/2;
         var partition = d3.partition()
             .size([2 * Math.PI, radius]);
 
