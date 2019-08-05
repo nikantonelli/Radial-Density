@@ -46,7 +46,8 @@ Ext.define('Rally.app.RadialDensity.app', {
     },
 
     statics: {
-        MAX_THREAD_COUNT: 128,  //More memory and more network usage the higher you go.
+        //Be aware that each thread might kick off more than one activity. Currently, it could do three for a user story.
+        MAX_THREAD_COUNT: 32,  //More memory and more network usage the higher you go.
     },
 
     _defectModel: null,
