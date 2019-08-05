@@ -7,7 +7,6 @@ function worker() {
 
 
     onmessage = function(ev) {
-        // console.log('Worker ' + this.id + ' received: ',ev.data);
 
         switch(ev.data.command){
             case 'wake' : {
@@ -15,11 +14,9 @@ function worker() {
                 break;
             } 
             case 'initialise': {
-                console.log('Worker received ', ev.data);
                 this.id = ev.data.id;
                 currentState = 'Asleep';
                 fetchFields = encodeURIComponent(ev.data.fields.toString());
-                this.console.log(fetchFields);
                 defaultReply();
                 break;
             } 
@@ -28,7 +25,7 @@ function worker() {
                 break;
             }
             default: {
-                this.console.log('Unknown message received by thread: ', this.id);
+                console.log('Unknown message received by thread: ', this.id);
                 break;
             }
         }

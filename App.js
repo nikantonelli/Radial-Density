@@ -45,62 +45,64 @@ Ext.define('Rally.app.RadialDensity.app', {
     _taskModel: null,
     _testCaseModel: null,
     _portfolioItemModels: {},
+    _typeSizeStore: null,
+    _typeSizeMax: 0,
+    _storyStates: [],
+    _defectStates: [],
+    _taskStates: [],
+    _tcStates: [],
+    _piStates: [],
 
+    _nodes: [],
+
+    _recordsToProcess: [],
+    _runningThreads: [],
+    _lastThreadID: 0,
 
     autoScroll: true,
     itemId: 'rallyApp',
     NODE_CIRCLE_SIZE: 8,
     MIN_CARD_WIDTH: 150,        //Looks silly on less than this
-    CARD_BORDER_WIDTH: 5,
-    MIN_ROW_WIDTH: 160,
-    MIN_CARD_HEIGHT:    150,
     MIN_ROW_HEIGHT: 30 ,         //Bit more than the text
-    LOAD_STORE_MAX_RECORDS: 100, //Can blow up the Rally.data.wsapi.filter.Or
-    WARN_STORE_MAX_RECORDS: 300, //Can be slow if you fetch too many
     LEFT_MARGIN_SIZE: 20,               //Leave space for "World view" text or colour box
     MIN_COLUMN_WIDTH: 200,
-    TITLE_NAME_LENGTH: 80,
+
     STORE_FETCH_FIELD_LIST:
     [
         'Attachments',
-        'Name',
-        'FormattedID',
-        'Parent',
-        'DragAndDropRank',
-        'Children',
-        'ObjectID',
-        'Project',
-        'DisplayColor',
-        'Owner',
         'Blocked',
-//        'BlockedReason',
-        'Ready',
-//        'Tags',
-        'Workspace',
-//        'RevisionHistory',
-//        'CreationDate',
+        'Children',
+        'Defects',
+        'DisplayColor',
+        'DragAndDropRank',
+        'FormattedID',
+        'Iteration',
+        'LastVerdict',
+        'Name',
+        'ObjectID',
+        'OrderIndex', 
+        'Ordinal',
+        'Owner',
+        'Parent',
         'PercentDoneByStoryCount',
         'PercentDoneByStoryPlanEstimate',
-        'PredecessorsAndSuccessors',
-        'State',
-        'ScheduleState',
-        'PreliminaryEstimate',
         'PlanEstimate',
-//        'Description',
-//        'Notes',
-        'Predecessors',
-        'Successors',
-        'OrderIndex',   //Used to get the State field order index
         'PortfolioItemType',
-        'Ordinal',
+        'Predecessors',
+        'PredecessorsAndSuccessors',
+        'PreliminaryEstimate',
+        'Project',
+        'Ready',
         'Release',
-        'Iteration',
-//        'Milestones',
-        'UserStories',
-        'Defects',
+        'Requirement',  //Needed to find parent of: Defects
+        'ScheduleState',
+        'State',
+        'Successors',
         'Tasks',
         'TestCases',
-        'LastVerdict',
+        'UserStories',
+        'WorkProduct',  //Needed =to find parent of: Tasks, TestCases
+        'Workspace',
         //Customer specific after here. Delete as appropriate
 //        'c_ProjectIDOBN',
 //        'c_QRWP',
@@ -292,13 +294,6 @@ CARD_DISPLAY_FIELD_LIST:
         gApp._refreshTree(viewBoxSize);    //Need to redraw if things are added
     },
 
-    _typeSizeStore: null,
-    _typeSizeMax: 0,
-    _storyStates: [],
-    _defectStates: [],
-    _taskStates: [],
-    _tcStates: [],
-
     //Entry point after creation of render box
     _onElementValid: function(rs) {
 
@@ -391,19 +386,9 @@ CARD_DISPLAY_FIELD_LIST:
                                                 }
                                             });
                                         });
-//                                        gApp.down('#piType').on ({
-//                                            select: function() { 
-//                                                gApp._kickOff();
-//                                            }
-//                                        });
                                     }
                                 }
                             },
-                            // listeners: {
-                            //     select: function() { 
-                            //         gApp._kickOff();
-                            //     }
-                            // }
                         }
                     ]
                 },
@@ -422,20 +407,9 @@ CARD_DISPLAY_FIELD_LIST:
 
     _onFilterChange: function(inlineFilterButton) {
         gApp._filterInfo = inlineFilterButton.getTypesAndFilters();
-//        gApp._loadStoreLocal();
     },
 
     _filterPanel: false,
-
-    //We don't want the initial setup firing of the event
-    _fireFilterPanelEvent: function() {
-        if (!gApp._filterPanel) {
-            gApp._filterPanel = true;
-        }
-        else {
-//            gApp._loadStoreLocal();
-        }
-    },
 
     _loadStoreLocal: function() {
         var ptype = gApp.down('#piType');
@@ -444,13 +418,6 @@ CARD_DISPLAY_FIELD_LIST:
 //            filters: gApp._filterInfo.filters,
 //            models: gApp._filterInfo.types,
             autoLoad: true,
-            // filters: [
-            //     {
-            //         property: 'Parent.Parent.OriginatingID',
-            //         operator: '!=',
-            //         value: null
-            //     }
-            // ],
             fetch: gApp.STORE_FETCH_FIELD_LIST,
             pageSize: 2000,
             limit: Infinity,
@@ -468,9 +435,6 @@ CARD_DISPLAY_FIELD_LIST:
             }
         });
     },
-
-    _nodes: [],
-    numStates: [],
 
     _kickOff: function() {
         var ptype = gApp.down('#piType');
@@ -708,17 +672,9 @@ CARD_DISPLAY_FIELD_LIST:
     },
     
     _fetchSuccessors: function(d) {
-
+        //Predecessors catches most of them. Only the successors that are out of scope will not be shown
     },
     
-    _processPredecessors: function(d) {
-
-    },
-    
-    _processSuccessors: function(d) {
-
-    },
-
     _getAttachments: function(records) {
         _.each(records, function(record) {
             var node = gApp._findNodeByRef(record.get('_ref'));
@@ -749,29 +705,24 @@ CARD_DISPLAY_FIELD_LIST:
         });
     },
     
-    recordsToProcess: [],
-    runningThreads: [],
-    lastThreadID: 0,
-
     _threadCreate: function() {
 
         var workerScript = worker.toString();
-        //Strip tail
+        //Strip head and tail
         workerScript = workerScript.substring(workerScript.indexOf("{") + 1, workerScript.lastIndexOf("}"));
         var workerBlob = new Blob([workerScript],
             {
                 type: "application/javascript"
             });
         var wrkr = new Worker(URL.createObjectURL(workerBlob));
-        console.log("Created worker: ", wrkr);
         var thread = {
             lastCommand: '',
             worker: wrkr,
             state: 'Initiate',
-            id: ++gApp.lastThreadID,
+            id: ++gApp._lastThreadID,
         };
         
-        gApp.runningThreads.push(thread);
+        gApp._runningThreads.push(thread);
         wrkr.onmessage = gApp._threadMessage;
         gApp._giveToThread(thread, {
             command: 'initialise',
@@ -785,7 +736,7 @@ CARD_DISPLAY_FIELD_LIST:
     },
 
     _wakeThread: function(thread) {
-        if ( gApp._checkThreadState(thread) === 'Asleep') {  //False = thread asleep
+        if ( gApp._checkThreadState(thread) === 'Asleep') {  
             thread.lastMessage = 'wake';
             thread.worker.postMessage({
                 command: thread.lastMessage
@@ -794,14 +745,14 @@ CARD_DISPLAY_FIELD_LIST:
     },
 
     _checkThreadActivity: function() {
-        while (gApp.runningThreads.length < gApp.self.MAX_THREAD_COUNT) {
+        while (gApp._runningThreads.length < gApp.self.MAX_THREAD_COUNT) {
             //Check the required amount of threads are still running
             gApp._threadCreate();
         }
-        _.each(gApp.runningThreads, function(thread) {
-            if ((gApp.recordsToProcess.length > 0) && (thread.state === 'Asleep')) {
+        _.each(gApp._runningThreads, function(thread) {
+            if ((gApp._recordsToProcess.length > 0) && (thread.state === 'Asleep')) {
                 //Keep asking to process until their is somethng that needs doing
-                gApp._processRecord(thread,gApp.recordsToProcess.pop());
+                gApp._processRecord(thread,gApp._recordsToProcess.pop());
             }
         });
 
@@ -835,7 +786,7 @@ CARD_DISPLAY_FIELD_LIST:
     _getArtifacts: function(records) {
         gApp._nodes = gApp._nodes.concat( gApp._createNodes(records)); 
         _.each(records, function(record) {
-            gApp.recordsToProcess.push(record);
+            gApp._recordsToProcess.push(record);
         });
         gApp._checkThreadActivity();
     },
@@ -879,19 +830,25 @@ CARD_DISPLAY_FIELD_LIST:
             gApp._getArtifacts(records);
             
         }
-        var thread = _.find(gApp.runningThreads, { id: msg.data.id});
+        var thread = _.find(gApp._runningThreads, { id: msg.data.id});
         thread.state = 'Asleep';
         //Farm out more if needed
-        if (gApp.recordsToProcess.length > 0) {
+        if (gApp._recordsToProcess.length > 0) {
             //We have some, so give to a thread
-            gApp._processRecord(thread, gApp.recordsToProcess.pop());
+            gApp._processRecord(thread, gApp._recordsToProcess.pop());
         }
-        else {
+
+        if ( gApp._allThreadsIdle()) {
             gApp.setLoading("Calculating plot....");
             gApp._redrawTree();
         }
 },
-    
+
+_allThreadsIdle: function() {
+    return _.every(gApp._runningThreads, function(thread) {
+        return thread.state === 'Asleep';
+    });
+},
     
     //Set the SVG area to the surface we have provided
     _setSVGSize: function(surface) {
@@ -958,8 +915,7 @@ CARD_DISPLAY_FIELD_LIST:
             gApp._nodeTree.sort(function(a,b) { return b.value - a.value; });
         }
 
-        var nodetree = partition(gApp._nodeTree)
-;
+        var nodetree = partition(gApp._nodeTree);
         var tree = d3.select('#tree');
 
         var nodes = tree.selectAll("node")
@@ -988,7 +944,7 @@ CARD_DISPLAY_FIELD_LIST:
                         }
                         else if (d.data.record.isPortfolioItem()) {
                             if (d.data.record.get('State')){
-                                lClass.push( gApp.settings.colourScheme + ((d.data.record.get('State').OrderIndex-1) + '-' + gApp.numStates[gApp._getOrdFromModel(d.data.record.get('_type'))]));
+                                lClass.push( gApp.settings.colourScheme + ((d.data.record.get('State').OrderIndex-1) + '-' + gApp._piStates[gApp._getOrdFromModel(d.data.record.get('_type'))]));
                             } else {
                                 lClass.push('error--node');
                             }
@@ -1045,16 +1001,6 @@ CARD_DISPLAY_FIELD_LIST:
         d.y0s = d.y0;
         d.x1s = d.x1;
         d.y1s = d.y1;
-    },
-
-    arcTween: function (a) {
-        var i = d3.interpolate({x: a.x0, dx: a.dx0}, a);
-        return function(t) {
-            var b = i(t);
-            a.x0 = b.x;
-            a.dx0 = b.dx;
-            return arc(b);
-        };
     },
     
     _nodeMouseOut: function(node, index,array){
@@ -1476,10 +1422,6 @@ CARD_DISPLAY_FIELD_LIST:
     },
         //Routines to manipulate the types
 
-    _getSelectedOrdinal: function() {
-        return gApp.down('#piType').lastSelection[0].get('Ordinal');
-    },
-
      _getTypeList: function(highestOrdinal) {
         var piModels = [];
         _.each(gApp._typeStore.data.items, function(type) {
@@ -1573,7 +1515,7 @@ CARD_DISPLAY_FIELD_LIST:
         nodetree.each( function(d) { 
             d.ChildAttachments.Count = d.value;
         });
-                    console.log("Created Tree: ", nodetree);
+        console.log("Created Tree: ", nodetree);
         return nodetree;
     },
 
@@ -1677,7 +1619,7 @@ CARD_DISPLAY_FIELD_LIST:
             );
             typeStore.load().then({ 
                 success: function(records){
-                    gApp.numStates[modeltype.Ordinal] = records.length;
+                    gApp._piStates[modeltype.Ordinal] = records.length;
                     _.each(records, function(state){
                         var idx = state.get('OrderIndex');
                         colourBox.append("circle")
