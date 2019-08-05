@@ -326,6 +326,9 @@ CARD_DISPLAY_FIELD_LIST:
             });
             Rally.data.ModelFactory.getModel({
                 type: 'UserStory',
+                context: {
+                    workspace: gApp.getContext().getWorkspace()
+                },
                 success: function(model) {
                     gApp._userStoryModel = model;
                     _.each(model.getField('ScheduleState').attributeDefinition.AllowedValues, function(value,idx) {
@@ -335,6 +338,9 @@ CARD_DISPLAY_FIELD_LIST:
             });
             Rally.data.ModelFactory.getModel({
                 type: 'Defect',
+                context: {
+                    workspace: gApp.getContext().getWorkspace()
+                },
                 success: function(model) {
                     gApp._defectModel = model;
                     _.each(model.getField('ScheduleState').attributeDefinition.AllowedValues, function(value,idx) {
@@ -344,6 +350,9 @@ CARD_DISPLAY_FIELD_LIST:
             });
             Rally.data.ModelFactory.getModel({
                 type: 'Task',
+                context: {
+                    workspace: gApp.getContext().getWorkspace()
+                },
                 success: function(model) {
                     gApp._taskModel = model;
                     _.each(model.getField('State').attributeDefinition.AllowedValues, function(value,idx) {
@@ -353,6 +362,9 @@ CARD_DISPLAY_FIELD_LIST:
             });
             Rally.data.ModelFactory.getModel({
                 type: 'TestCase',
+                context: {
+                    workspace: gApp.getContext().getWorkspace()
+                },
                 success: function(model) {
                     gApp._testCaseModel = model;
                     _.each(model.getField('LastVerdict').attributeDefinition.AllowedValues, function(value,idx) {
@@ -380,7 +392,7 @@ CARD_DISPLAY_FIELD_LIST:
                             margin: '5 0 5 20',
                             defaultSelectionPosition: 'first',
                             storeConfig: {
-                                fetch: ['DisplayName', 'ElementName','Ordinal','Name','TypePath', 'Attributes'],
+//                                fetch: ['DisplayName', 'ElementName','Ordinal','Name','TypePath', 'Attributes'],
                                 listeners: {
                                     load: function(store,records) {
                                         gApp._typeStore = store;
@@ -391,6 +403,7 @@ CARD_DISPLAY_FIELD_LIST:
                                         _.each(records, function(modeltype) {
                                             Rally.data.ModelFactory.getModel({
                                                 type: modeltype.get('TypePath'),
+                                                fetch: true,
                                                 success: function(model) {
                                                     gApp._portfolioItemModels[modeltype.get('Name')] = model;
                                                 }
@@ -1070,7 +1083,7 @@ _allThreadsIdle: function() {
         if (!(node.data.record.data.ObjectID)) return; //Only exists on real items
         //Get ordinal (or something ) to indicate we are the lowest level, then use "UserStories" instead of "Children"
         if (event.shiftKey) { 
-            gApp._nodePopup(node,index,array); 
+//            gApp._nodePopup(node,index,array); 
         }  else {
             gApp._dataPanel(node,index,array);
         }
