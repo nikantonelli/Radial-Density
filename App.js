@@ -550,6 +550,7 @@ CARD_DISPLAY_FIELD_LIST:
                     if (this.ticked === false) {
                         this.setText('Return');
                         this.ticked = true;
+                        this.currentState = d3.select("#depsOverlay").attr("visibility");
                         d3.select("#colourLegend").attr("visibility","visible");
                         d3.select("#tree").attr("visibility", "hidden");
                         d3.select("#depsOverlay").attr("visibility", "hidden");
@@ -558,7 +559,8 @@ CARD_DISPLAY_FIELD_LIST:
                         this.ticked = false;
                         d3.select("#colourLegend").attr("visibility","hidden");
                         d3.select("#tree").attr("visibility", "visible");
-                        d3.select("#depsOverlay").attr("visibility", "visible");
+                        if (this.currentState === undefined) { this.currentState = 'hidden'; }
+                        d3.select("#depsOverlay").attr("visibility", this.currentState);
                     }
                 }
             });
