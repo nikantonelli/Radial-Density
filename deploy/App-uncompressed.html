@@ -438,8 +438,7 @@ CARD_DISPLAY_FIELD_LIST:
         var ptype = gApp.down('#piType');
         Ext.create('Rally.data.wsapi.Store', {
             model: 'portfolioitem/' + ptype.rawValue.toLowerCase(),
-//            filters: gApp._filterInfo.filters,
-//            models: gApp._filterInfo.types,
+            filters: gApp._filterInfo.filters,
             autoLoad: true,
             fetch: gApp.STORE_FETCH_FIELD_LIST,
             pageSize: 2000,

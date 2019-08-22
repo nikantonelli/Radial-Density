@@ -11,8 +11,7 @@
         "rally-sdk2-test-utils": "0.1.2"
     },
     "dependencies": {
-        "lodash": "2.4.2",
-        "rally-app-builder": "^2.1.1"
+        "lodash": "2.4.2"
     },
     "scripts": {
         "test": "npm i && grunt test",
