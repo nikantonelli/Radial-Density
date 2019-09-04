@@ -246,8 +246,17 @@ CARD_DISPLAY_FIELD_LIST:
     timer: null,
 
     launch: function() {
-        
-        this.exporter = Ext.create("TreeExporter");
+
+        var exporterConfig =         {
+            fields: ['Owner']           //Name is mandatory in the exporter and not needed here
+        };
+
+        if (this.getSetting('fetchAttachments') === true) {
+            exporterConfig.fields.push('Attachments');
+        }
+
+        this.exporter = Ext.create("TreeExporter", exporterConfig);
+
     },
     
     _redrawTree: function() {
@@ -691,11 +700,12 @@ CARD_DISPLAY_FIELD_LIST:
     },
     
     _getAttachments: function(records) {
+
         _.each(records, function(record) {
-            var node = gApp._findNodeByRef(record.get('_ref'));
+            var node = gApp._findNodeById(gApp._nodes, record.get('FormattedID'));
             if (record.get('Attachments').Count >0){
                 var collectionConfig = {
-                    fetch: ['Size','Type'],
+                    fetch: ['Size','_refObjectName'],
                     callback: function(records, operation, s) {
                         if (s) {
                             if (records && records.length) {
@@ -800,6 +810,11 @@ CARD_DISPLAY_FIELD_LIST:
 
     _getArtifacts: function(records) {
         gApp._nodes = gApp._nodes.concat( gApp._createNodes(records)); 
+
+        //When we come in here, we already have artefacts, so let's fetch their attachments
+        if (gApp.getSetting('fetchAttachments') === true) {
+            gApp._getAttachments(records);
+        }
         _.each(records, function(record) {
             gApp._recordsToProcess.push(record);
         });
@@ -843,6 +858,7 @@ CARD_DISPLAY_FIELD_LIST:
                 }
             });
             gApp._getArtifacts(records);
+
             
         }
         var thread = _.find(gApp._runningThreads, { id: msg.data.id});
