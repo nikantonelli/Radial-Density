@@ -405,7 +405,7 @@ CARD_DISPLAY_FIELD_LIST:
                                                 type: modeltype.get('TypePath'),
                                                 fetch: true,
                                                 success: function(model) {
-                                                    gApp._portfolioItemModels[modeltype.get('Name')] = model;
+                                                    gApp._portfolioItemModels[modeltype.get('ElementName')] = model;
                                                 }
                                             });
                                         });
