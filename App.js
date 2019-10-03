@@ -443,6 +443,12 @@ CARD_DISPLAY_FIELD_LIST:
             fetch: gApp.STORE_FETCH_FIELD_LIST,
             pageSize: 2000,
             limit: Infinity,
+            sorters: [
+                {
+                    property: 'DragAndDropRank',
+                    direction: 'ASC'
+                }
+            ],
             listeners: {
                 load: function( store, records, success) {
                     gApp._nodes = [ gApp.WorldViewNode ];
