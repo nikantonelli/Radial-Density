@@ -799,7 +799,7 @@ CARD_DISPLAY_FIELD_LIST:
         var msg = {
             command: thread.lastCommand,
             objectID: record.get('ObjectID'),
-            hasChildren: (record.hasField('Children') && (record.get('Children').Count > 0) && (!record.data._ref.includes('hierarchicalrequirement'))) ?
+            hasChildren: (record.hasField('Children') && (record.get('Children').Count > 0)) ?
                 Rally.util.Ref.getUrl(record.get('Children')._ref):null,
             hasDefects: (gApp.getSetting('includeDefects') && record.hasField('Defects') && (record.get('Defects').Count > 0) ) ?
                 Rally.util.Ref.getUrl(record.get('Defects')._ref):null,
@@ -1504,7 +1504,10 @@ _allThreadsIdle: function() {
             parent = record.data.Parent;
         }
         else if (record.isUserStory()) {
-            parent = record.data[parentField];
+            if (record.data.Parent) { parent = record.data.Parent;}
+            else {
+                parent = record.data[parentField];
+            }
         }
         else if (record.isTask()) {
             parent = record.data.WorkProduct;
