@@ -4,6 +4,11 @@
 Ext.define('Rally.app.RadialDensity.app', {
     extend: 'Rally.app.App',
     componentCls: 'app',
+
+    integrationHeaders : {
+        name : "niks-apps-radial-density"
+    },
+    
     config: {
         defaultSettings: {
             includeStories: true,
