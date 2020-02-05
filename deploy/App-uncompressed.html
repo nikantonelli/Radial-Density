@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Density Map</title>
+    <title>Radial Density Map</title>
 
     <script type="text/javascript" src="/apps/2.1/sdk.js"></script>
 
@@ -10,156 +10,20 @@
                 (function () {
     var Ext = window.Ext4 || window.Ext;
 
-    Ext.define('Ext.data.MyConnection', {
-    override: 'Ext.data.Connection',
-    mixins: {
-        observable:  Ext.util.Observable 
-    },
-    
-               
-                                  
-      
-
-    statics: {
-        requestId: 0
-    },
-
-    url: null,
-    async: true,
-    method: null,
-    username: '',
-    password: '',
-
-    
-    disableCaching: true,
-
-    
-    withCredentials: false,
-
-    
-    binary: false,
-
-    
-    cors: false,
-
-    isXdr: false,
-
-    defaultXdrContentType: 'text/plain',
-
-    
-    disableCachingParam: '_dc',
-
-    
-    timeout : 60000,
-
-    
-
-    sendQueues: [],
-
-    
-
-    
-
-    useDefaultHeader : true,
-    defaultPostHeader : 'application/x-www-form-urlencoded; charset=UTF-8',
-    useDefaultXhrHeader : true,
-    defaultXhrHeader : 'XMLHttpRequest',
-
-    constructor : function(config) {
-        config = config || {};
-        Ext.apply(this, config);
-        sendQueues[0] = [];
-        sendQueues[1] = [];
-        this.requests = {};
-        this.mixins.observable.constructor.call(this);
-        console.log(this);
-    },
-
-    
-    request : function(options) {
-        options = options || {};
-        var me = this,
-            scope = options.scope || window,
-            username = options.username || me.username,
-            password = options.password || me.password || '',
-            async,
-            requestOptions,
-            request,
-            headers,
-            xhr;
-        if (me.fireEvent('beforerequest', me, options) !== false) {
-
-            requestOptions = me.setOptions(options, scope);
-
-            if (me.isFormUpload(options)) {
-                me.upload(options.form, requestOptions.url, requestOptions.data, options);
-                return null;
-            }
-
-            
-            if (options.autoAbort || me.autoAbort) {
-                me.abort();
-            }
-
-            
-            async = options.async !== false ? (options.async || me.async) : false;
-            xhr = me.openRequest(options, requestOptions, async, username, password);
-
-            
-            if (!me.isXdr) {
-                headers = me.setupHeaders(xhr, options, requestOptions.data, requestOptions.params);
-            }
-
-            
-            request = {
-                id: ++Ext.data.Connection.requestId,
-                xhr: xhr,
-                headers: headers,
-                options: options,
-                async: async,
-                binary: options.binary || me.binary,
-                timeout: setTimeout(function() {
-                    request.timedout = true;
-                    me.abort(request);
-                }, options.timeout || me.timeout)
-            };
-
-            me.requests[request.id] = request;
-            me.latestId = request.id;
-            
-            if (async) {
-                if (!me.isXdr) {
-                    xhr.onreadystatechange = Ext.Function.bind(me.onStateChange, me, [request]);
-                }
-            }
-
-            if (me.isXdr) {
-                me.processXdrRequest(request, xhr);
-            }
-
-            
-            xhr.send(requestOptions.data);
-            if (!async) {
-                return me.onComplete(request);
-            }
-            return request;
-        } else {
-            Ext.callback(options.callback, options.scope, [options, undefined, undefined]);
-            return null;
-        }
-    },
-});
-
-
 Ext.define('Rally.app.RadialDensity.app', {
     extend: 'Rally.app.App',
     componentCls: 'app',
+
+    integrationHeaders : {
+        name : "niks-apps-radial-density"
+    },
+    
     config: {
         defaultSettings: {
             includeStories: true,
-            includeDefects: true,
-            includeTasks: true,
-            includeTestCases: true,
+            includeDefects: false,
+            includeTasks: false,
+            includeTestCases: false,
             usePreliminaryEstimate: true,
             hideArchived: false,
             sizeStoriesByPlanEstimate: false,
@@ -186,59 +50,74 @@ Ext.define('Rally.app.RadialDensity.app', {
         }
     },
 
+    statics: {
+        //Be aware that each thread might kick off more than one activity. Currently, it could do three for a user story.
+        MAX_THREAD_COUNT: 32,  //More memory and more network usage the higher you go.
+    },
+
+    _defectModel: null,
+    _userStoryModel: null,
+    _taskModel: null,
+    _testCaseModel: null,
+    _portfolioItemModels: {},
+    _typeSizeStore: null,
+    _typeSizeMax: 0,
+    _storyStates: [],
+    _defectStates: [],
+    _taskStates: [],
+    _tcStates: [],
+    _piStates: [],
+
+    _nodes: [],
+
+    _recordsToProcess: [],
+    _runningThreads: [],
+    _lastThreadID: 0,
+
     autoScroll: true,
     itemId: 'rallyApp',
     NODE_CIRCLE_SIZE: 8,
     MIN_CARD_WIDTH: 150,        //Looks silly on less than this
-    CARD_BORDER_WIDTH: 5,
-    MIN_ROW_WIDTH: 160,
-    MIN_CARD_HEIGHT:    150,
     MIN_ROW_HEIGHT: 30 ,         //Bit more than the text
-    LOAD_STORE_MAX_RECORDS: 100, //Can blow up the Rally.data.wsapi.filter.Or
-    WARN_STORE_MAX_RECORDS: 300, //Can be slow if you fetch too many
     LEFT_MARGIN_SIZE: 20,               //Leave space for "World view" text or colour box
     MIN_COLUMN_WIDTH: 200,
-    TITLE_NAME_LENGTH: 80,
+
     STORE_FETCH_FIELD_LIST:
     [
         'Attachments',
-        'Name',
-        'FormattedID',
-        'Parent',
-        'DragAndDropRank',
-        'Children',
-        'ObjectID',
-        'Project',
-        'DisplayColor',
-        'Owner',
         'Blocked',
-//        'BlockedReason',
-        'Ready',
-//        'Tags',
-        'Workspace',
-//        'RevisionHistory',
-//        'CreationDate',
+        'Children',
+        'Defects',
+        'DisplayColor',
+        'DragAndDropRank',
+        'FormattedID',
+        'Iteration',
+        'LastVerdict',
+        'Name',
+        'ObjectID',
+        'OrderIndex', 
+        'Ordinal',
+        'Owner',
+        'Parent',
         'PercentDoneByStoryCount',
         'PercentDoneByStoryPlanEstimate',
-        'PredecessorsAndSuccessors',
-        'State',
-        'ScheduleState',
-        'PreliminaryEstimate',
         'PlanEstimate',
-//        'Description',
-//        'Notes',
-        'Predecessors',
-        'Successors',
-        'OrderIndex',   //Used to get the State field order index
         'PortfolioItemType',
-        'Ordinal',
+        'Predecessors',
+        'PredecessorsAndSuccessors',
+        'PreliminaryEstimate',
+        'Project',
+        'Ready',
         'Release',
-        'Iteration',
-        'Milestones',
-        'UserStories',
-        'Defects',
+        'Requirement',  //Needed to find parent of: Defects
+        'ScheduleState',
+        'State',
+        'Successors',
         'Tasks',
-        'TestCases'
+        'TestCases',
+        'UserStories',
+        'WorkProduct',  //Needed =to find parent of: Tasks, TestCases
+        'Workspace',
         //Customer specific after here. Delete as appropriate
 //        'c_ProjectIDOBN',
 //        'c_QRWP',
@@ -271,7 +150,6 @@ CARD_DISPLAY_FIELD_LIST:
         {
             xtype: 'container',
             itemId: 'rootSurface',
-            margin: '5 5 5 5',
             layout: 'auto',
             autoEl: {
                 tag: 'svg'
@@ -282,8 +160,16 @@ CARD_DISPLAY_FIELD_LIST:
         }
     ],
 
-    onSettingsUpdate: function() {
-        this._redrawTree();
+    onSettingsUpdate: function(newSettings) {
+        // debugger;
+        // if (( newSettings.includeDefects !== this.settings.includeDefects) ||
+        //     ( newSettings.includeTasks !== this.settings.includeTasks) ||
+        //     ( newSettings.includeStories !== this.settings.includeStories) ||
+        //     ( newSettings.includeTesCases !== this.settings.includeTesCases)
+        // ) {
+            gApp._loadStoreLocal();
+        // }
+        // this._redrawTree();
     },
 
     getSettingsFields: function() {
@@ -374,19 +260,20 @@ CARD_DISPLAY_FIELD_LIST:
     timer: null,
 
     launch: function() {
-        this.on({
-            redrawTree: { fn: this._resetTimer, scope: this, buffer: 1000}
-        });
-        this.exporter = Ext.create("TreeExporter");
-    },
 
-    _resetTimer: function() {
-        if ( this.timer) clearTimeout(this.timer);
-        this.timer = setTimeout(this._redrawTree, 500);
+        var exporterConfig =         {
+            fields: ['Owner']           //Name is mandatory in the exporter and not needed here
+        };
+
+        if (this.getSetting('fetchAttachments') === true) {
+            exporterConfig.fields.push('Attachments');
+        }
+
+        this.exporter = Ext.create("TreeExporter", exporterConfig);
+
     },
     
     _redrawTree: function() {
-        gApp.setLoading(false);
         if (gApp.down('#loadingBox')) gApp.down('#loadingBox').destroy();
         clearTimeout(gApp.timer);
         if (gApp._nodeTree) {
@@ -411,29 +298,25 @@ CARD_DISPLAY_FIELD_LIST:
        //Get all the nodes and the "Unknown" parent virtual nodes
        var nodetree = gApp._createTree(gApp._nodes);
        gApp._nodeTree = nodetree;
-        var viewBoxSize = [ 1200,800 ];
+       
+        var viewBoxSize = Math.min(this.getSize().width, this.getSize().height - gApp.down('#headerBox').getSize().height);
         gApp._setViewBox(viewBoxSize);
 
         //Add a group for the tree of artefacts
         var t = d3.select('svg').append('g')
             .attr('id','tree')
             //Transform to the centre of the screen
-            .attr("transform","translate(" + viewBoxSize[0]/2 + "," + viewBoxSize[1]/2 + ")");
+            .attr("transform","translate(" + viewBoxSize/2 + "," + viewBoxSize/2 + ")");
 
         //Add in an overlay if the user wants to see dependencies
         d3.select('svg').append('g')
             .attr('id','depsOverlay')
             .attr("visibility", "hidden")
             //Transform to the centre of the screen
-            .attr("transform","translate(" + viewBoxSize[0]/2 + "," + viewBoxSize[1]/2 + ")");
+            .attr("transform","translate(" + viewBoxSize/2 + "," + viewBoxSize/2 + ")");
         
         gApp._refreshTree(viewBoxSize);    //Need to redraw if things are added
     },
-
-    _typeSizeStore: null,
-    _typeSizeMax: 0,
-    _storyStates: [],
-    _taskStates: [],
 
     //Entry point after creation of render box
     _onElementValid: function(rs) {
@@ -457,17 +340,49 @@ CARD_DISPLAY_FIELD_LIST:
             });
             Rally.data.ModelFactory.getModel({
                 type: 'UserStory',
+                context: {
+                    workspace: gApp.getContext().getWorkspace()
+                },
                 success: function(model) {
+                    gApp._userStoryModel = model;
                     _.each(model.getField('ScheduleState').attributeDefinition.AllowedValues, function(value,idx) {
                         gApp._storyStates.push( { name: value.StringValue, value : idx});
                     });
                 }
             });
             Rally.data.ModelFactory.getModel({
-                type: 'Task',
+                type: 'Defect',
+                context: {
+                    workspace: gApp.getContext().getWorkspace()
+                },
                 success: function(model) {
+                    gApp._defectModel = model;
+                    _.each(model.getField('ScheduleState').attributeDefinition.AllowedValues, function(value,idx) {
+                        gApp._defectStates.push( { name: value.StringValue, value : idx});
+                    });
+                }
+            });
+            Rally.data.ModelFactory.getModel({
+                type: 'Task',
+                context: {
+                    workspace: gApp.getContext().getWorkspace()
+                },
+                success: function(model) {
+                    gApp._taskModel = model;
                     _.each(model.getField('State').attributeDefinition.AllowedValues, function(value,idx) {
                         gApp._taskStates.push( { name: value.StringValue, value : idx});
+                    });
+                }
+            });
+            Rally.data.ModelFactory.getModel({
+                type: 'TestCase',
+                context: {
+                    workspace: gApp.getContext().getWorkspace()
+                },
+                success: function(model) {
+                    gApp._testCaseModel = model;
+                    _.each(model.getField('LastVerdict').attributeDefinition.AllowedValues, function(value,idx) {
+                        gApp._tcStates.push( { name: value.StringValue, value : idx});
                     });
                 }
             });
@@ -491,26 +406,26 @@ CARD_DISPLAY_FIELD_LIST:
                             margin: '5 0 5 20',
                             defaultSelectionPosition: 'first',
                             storeConfig: {
-                                fetch: ['DisplayName', 'ElementName','Ordinal','Name','TypePath', 'Attributes'],
+//                                fetch: ['DisplayName', 'ElementName','Ordinal','Name','TypePath', 'Attributes'],
                                 listeners: {
-                                    load: function(store) {
+                                    load: function(store,records) {
                                         gApp._typeStore = store;
                                         gApp._addFilterPanel();
                                         gApp._addColourHelper();
                                         gApp._addButtons();
-                                        gApp.down('#piType').on ({
-                                            select: function() { 
-//                                                gApp._kickOff();
-                                            }
+                                        // Load the models into our app
+                                        _.each(records, function(modeltype) {
+                                            Rally.data.ModelFactory.getModel({
+                                                type: modeltype.get('TypePath'),
+                                                fetch: true,
+                                                success: function(model) {
+                                                    gApp._portfolioItemModels[modeltype.get('ElementName')] = model;
+                                                }
+                                            });
                                         });
                                     }
                                 }
                             },
-                            // listeners: {
-                            //     select: function() { 
-                            //         gApp._kickOff();
-                            //     }
-                            // }
                         }
                     ]
                 },
@@ -529,49 +444,39 @@ CARD_DISPLAY_FIELD_LIST:
 
     _onFilterChange: function(inlineFilterButton) {
         gApp._filterInfo = inlineFilterButton.getTypesAndFilters();
-//        gApp._loadStoreLocal();
     },
 
     _filterPanel: false,
-
-    //We don't want the initial setup firing of the event
-    _fireFilterPanelEvent: function() {
-        if (!gApp._filterPanel) {
-            gApp._filterPanel = true;
-        }
-        else {
-//            gApp._loadStoreLocal();
-        }
-    },
 
     _loadStoreLocal: function() {
         var ptype = gApp.down('#piType');
         Ext.create('Rally.data.wsapi.Store', {
             model: 'portfolioitem/' + ptype.rawValue.toLowerCase(),
-//            filters: gApp._filterInfo.filters,
-//            models: gApp._filterInfo.types,
+            filters: gApp._filterInfo.filters,
             autoLoad: true,
-            // filters: [
-            //     {
-            //         property: 'Parent.Parent.OriginatingID',
-            //         operator: '!=',
-            //         value: null
-            //     }
-            // ],
             fetch: gApp.STORE_FETCH_FIELD_LIST,
-            pageSize: 8000,
+            pageSize: 2000,
             limit: Infinity,
+            sorters: [
+                {
+                    property: 'DragAndDropRank',
+                    direction: 'ASC'
+                }
+            ],
             listeners: {
                 load: function( store, records, success) {
                     gApp._nodes = [ gApp.WorldViewNode ];
-                    gApp._getArtifacts(records);
+                    if (records.length > 0) {
+                        gApp.setLoading("Loading artefacts....");
+                        gApp._getArtifacts(records);
+                    }
+                    else {
+                        Rally.ui.notify.Notifier.show({message: 'No Artefacts to fetch'});
+                    }
                 }
             }
         });
     },
-
-    _nodes: [],
-    numStates: [],
 
     _kickOff: function() {
         var ptype = gApp.down('#piType');
@@ -686,6 +591,7 @@ CARD_DISPLAY_FIELD_LIST:
                     if (this.ticked === false) {
                         this.setText('Return');
                         this.ticked = true;
+                        this.currentState = d3.select("#depsOverlay").attr("visibility");
                         d3.select("#colourLegend").attr("visibility","visible");
                         d3.select("#tree").attr("visibility", "hidden");
                         d3.select("#depsOverlay").attr("visibility", "hidden");
@@ -694,7 +600,8 @@ CARD_DISPLAY_FIELD_LIST:
                         this.ticked = false;
                         d3.select("#colourLegend").attr("visibility","hidden");
                         d3.select("#tree").attr("visibility", "visible");
-                        d3.select("#depsOverlay").attr("visibility", "visible");
+                        if (this.currentState === undefined) { this.currentState = 'hidden'; }
+                        d3.select("#depsOverlay").attr("visibility", this.currentState);
                     }
                 }
             });
@@ -809,23 +716,16 @@ CARD_DISPLAY_FIELD_LIST:
     },
     
     _fetchSuccessors: function(d) {
-
+        //Predecessors catches most of them. Only the successors that are out of scope will not be shown
     },
     
-    _processPredecessors: function(d) {
-
-    },
-    
-    _processSuccessors: function(d) {
-
-    },
-
     _getAttachments: function(records) {
+
         _.each(records, function(record) {
-            var node = gApp._findNodeByRef(record.get('_ref'));
+            var node = gApp._findNodeById(gApp._nodes, record.get('FormattedID'));
             if (record.get('Attachments').Count >0){
                 var collectionConfig = {
-                    fetch: ['Size','Type'],
+                    fetch: ['Size','_refObjectName'],
                     callback: function(records, operation, s) {
                         if (s) {
                             if (records && records.length) {
@@ -850,95 +750,157 @@ CARD_DISPLAY_FIELD_LIST:
         });
     },
     
-    _getArtifacts: function(data) {
-        console.log('Loaing ', data.length, ' artefacts');
-        gApp.setLoading("Loading artefacts..");
+    _threadCreate: function() {
 
-        //On re-entry send an event to redraw
-        gApp._nodes = gApp._nodes.concat( gApp._createNodes(data));    //Add what we started with to the node list
-        this.fireEvent('redrawTree');
-        //Starting with highest selected by the combobox, go down
-
-        _.each(data, function(parent) {
-            //Limit this to portfolio items down to just above feature level and not beyond.
-            //The lowest level portfolio item type has 'UserStories' not 'Children'
-            if (parent.hasField('Children') && (!parent.data._ref.includes('hierarchicalrequirement'))){      
-                collectionConfig = {
-                    sorters: [{
-                        property: 'DragAndDropRank',
-                        direction: 'ASC'
-                    }],
-                    fetch: gApp.STORE_FETCH_FIELD_LIST,
-                    callback: function(records, operation, success) {
-                        //Start the recursive trawl down through the levels
-                        if (success && records.length)  {
-                            gApp._getArtifacts(records);
-                            if (gApp.getSetting('fetchAttachments') === true) {
-                                gApp._getAttachments(records);
-                            }
-                        }
-                    }
-                };
-                if (gApp.getSetting('hideArchived')) {
-                    collectionConfig.filters = [{
-                        property: 'Archived',
-                        operator: '=',
-                        value: false
-                    }];
-                }
-                parent.getCollection( 'Children').load( Ext.clone(collectionConfig) );
-            }
-            else {
-                //We are features or UserStories when we come here
-                collectionConfig = {
-                    sorters: [{
-                        property: 'DragAndDropRank',
-                        direction: 'ASC'  
-                    }],
-                    fetch: gApp.STORE_FETCH_FIELD_LIST,
-                    callback: function(records, operation, s) {
-                        if (s && records && records.length) {
-                            gApp._getArtifacts(records);
-                            gApp.fireEvent('redrawTree');
-                            
-                            if (gApp.getSetting('fetchAttachments') === true) {
-                                gApp._getAttachments(records);
-                            }    
-                        }
-                    }
-                };
-                //If we are lowest level PI, then we need to fetch User Stories
-                if (gApp.getSetting('includeStories') && parent.hasField('UserStories') &&
-                    (parent.get('UserStories').Count > 0) ) {  
-                    collectionConfig.fetch.push(gApp._getModelFromOrd(0).split("/").pop()); //Add the lowest level field on User Stories
-                    parent.getCollection( 'UserStories').load( Ext.clone(collectionConfig) );
-                } 
-                //If we are storeis, then we need to fetch Defects
-                if (gApp.getSetting('includeDefects') && parent.hasField('Defects') &&
-                    (parent.get('Defects').Count > 0) ) {  
-                    collectionConfig.fetch.push('Requirement'); //Add the User Story not the Test Case
-                    parent.getCollection( 'Defects').load( Ext.clone(collectionConfig) );
-                } 
-                //If we are defects or storeis, then we need to fetch Tasks
-                
-                if (gApp.getSetting('includeTasks') && parent.hasField('Tasks') &&
-                        (parent.get('Tasks').Count > 0) ) {  
-                    collectionConfig.fetch.push('WorkProduct'); //Add the User Story not the Test Case
-                    parent.getCollection( 'Tasks').load( Ext.clone(collectionConfig) );
-                } 
-                if (gApp.getSetting('includeTestCases') && parent.hasField('TestCases')  &&
-                        (parent.get('TestCases').Count > 0) ) {  
-                    collectionConfig.fetch.push('WorkProduct'); //Add the User Story not the Test Case
-                    parent.getCollection( 'TestCases').load( Ext.clone(collectionConfig) );
-                } 
-                // //If we are userstories, then we need to fetch tasks
-                // else if (parent.hasField('Tasks') && (gApp.getSetting('includeStories'))){
-                //     parent.getCollection( 'Tasks').load( collectionConfig );                    
-                // }
-            }
+        var workerScript = worker.toString();
+        //Strip head and tail
+        workerScript = workerScript.substring(workerScript.indexOf("{") + 1, workerScript.lastIndexOf("}"));
+        var workerBlob = new Blob([workerScript],
+            {
+                type: "application/javascript"
+            });
+        var wrkr = new Worker(URL.createObjectURL(workerBlob));
+        var thread = {
+            lastCommand: '',
+            worker: wrkr,
+            state: 'Initiate',
+            id: ++gApp._lastThreadID,
+        };
+        
+        gApp._runningThreads.push(thread);
+        wrkr.onmessage = gApp._threadMessage;
+        gApp._giveToThread(thread, {
+            command: 'initialise',
+            id: thread.id,
+            fields: gApp.STORE_FETCH_FIELD_LIST.concat([gApp._getModelFromOrd(0).split("/").pop()])
         });
     },
 
+    _checkThreadState: function(thread) {
+        return thread.state;
+    },
+
+    _wakeThread: function(thread) {
+        if ( gApp._checkThreadState(thread) === 'Asleep') {  
+            thread.lastMessage = 'wake';
+            thread.worker.postMessage({
+                command: thread.lastMessage
+            });
+        }
+    },
+
+    _checkThreadActivity: function() {
+        while (gApp._runningThreads.length < gApp.self.MAX_THREAD_COUNT) {
+            //Check the required amount of threads are still running
+            gApp._threadCreate();
+        }
+        _.each(gApp._runningThreads, function(thread) {
+            if ((gApp._recordsToProcess.length > 0) && (thread.state === 'Asleep')) {
+                //Keep asking to process until their is somethng that needs doing
+                gApp._processRecord(thread,gApp._recordsToProcess.pop());
+            }
+        });
+
+    },
+
+    _giveToThread: function(thread, msg){
+        thread.state = 'Busy';
+        thread.worker.postMessage(msg);
+    },
+
+    _processRecord: function(thread, record) {
+        thread.lastCommand = 'readchildren';
+        var msg = {
+            command: thread.lastCommand,
+            objectID: record.get('ObjectID'),
+            hasChildren: (record.hasField('Children') && (record.get('Children').Count > 0)) ?
+                Rally.util.Ref.getUrl(record.get('Children')._ref):null,
+            hasDefects: (gApp.getSetting('includeDefects') && record.hasField('Defects') && (record.get('Defects').Count > 0) ) ?
+                Rally.util.Ref.getUrl(record.get('Defects')._ref):null,
+            hasStories: (gApp.getSetting('includeStories') && record.hasField('UserStories') && (record.get('UserStories').Count > 0)) ?
+                Rally.util.Ref.getUrl(record.get('UserStories')._ref):null,
+            hasTasks: (gApp.getSetting('includeTasks') && record.hasField('Tasks') && (record.get('Tasks').Count > 0) ) ?
+                Rally.util.Ref.getUrl(record.get('Tasks')._ref):null,
+            hasTestCases:(gApp.getSetting('includeTestCases') && record.hasField('TestCases')  && (record.get('TestCases').Count > 0) ) ?
+                Rally.util.Ref.getUrl(record.get('TestCases')._ref):null,
+
+        };
+        gApp._giveToThread(thread, msg);    //Send a wakeup message with an item
+    },
+
+    _getArtifacts: function(records) {
+        gApp._nodes = gApp._nodes.concat( gApp._createNodes(records)); 
+
+        //When we come in here, we already have artefacts, so let's fetch their attachments
+        if (gApp.getSetting('fetchAttachments') === true) {
+            gApp._getAttachments(records);
+        }
+        _.each(records, function(record) {
+            gApp._recordsToProcess.push(record);
+        });
+        gApp._checkThreadActivity();
+    },
+
+    //This is in the context of the worker thread even though the code is here
+    _threadMessage: function(msg) {
+        if ((msg.data.response === 'Alive') && (msg.data.reply === 'Asleep')) {
+            //TODO: Add timeout control here. If the process is busy, it will not return Asleep, but will be Alive.
+            // console.log('Thread ' + msg.data.id + ' responded to ping');
+        } 
+
+        //Records come back as raw info. We need to make proper Rally.data.WSAPI.Store records out of them
+        if (msg.data.reply === 'Data') {
+            var records = [];
+
+            _.each(msg.data.records, function(item) {
+                switch (item._type) {
+                    case 'HierarchicalRequirement' : {
+                        records.push(Ext.create(gApp._userStoryModel, item));
+                        break;
+                    }
+                    case 'Defect' : {
+                        records.push(Ext.create(gApp._defectModel, item));
+                        break;
+                    }
+                    case 'Task' : {
+                        records.push(Ext.create(gApp._taskModel, item));
+                        break;
+                    }
+                    case 'TestCase' : {
+                        records.push(Ext.create(gApp._testCaseModel, item));
+                        break;
+                    }
+                    default: {
+                        //Portfolio Item
+                        records.push(Ext.create(gApp._portfolioItemModels[item._type.split('/').pop()], item));
+                        break;
+                    }
+                }
+            });
+            gApp._getArtifacts(records);
+
+            
+        }
+        var thread = _.find(gApp._runningThreads, { id: msg.data.id});
+        thread.state = 'Asleep';
+        //Farm out more if needed
+        if (gApp._recordsToProcess.length > 0) {
+            //We have some, so give to a thread
+            gApp._processRecord(thread, gApp._recordsToProcess.pop());
+        }
+
+        if ( gApp._allThreadsIdle()) {
+            gApp.setLoading("Calculating plot....");
+            gApp._redrawTree();
+        }
+},
+
+_allThreadsIdle: function() {
+    return _.every(gApp._runningThreads, function(thread) {
+        return thread.state === 'Asleep';
+    });
+},
+    
     //Set the SVG area to the surface we have provided
     _setSVGSize: function(surface) {
         var svg = d3.select('svg');
@@ -951,13 +913,13 @@ CARD_DISPLAY_FIELD_LIST:
     _setViewBox: function(viewBoxSize) {
        var svg = d3.select('svg');
         var rs = this.down('#rootSurface');
-        rs.getEl().setWidth(viewBoxSize[0]);
-        rs.getEl().setHeight(viewBoxSize[1]);
+        rs.getEl().setWidth(viewBoxSize);
+        rs.getEl().setHeight(viewBoxSize);
         //Set the svg area to the surface
        this._setSVGSize(rs);
         svg.attr('class', 'rootSurface');
         svg.attr('preserveAspectRatio', 'none');
-        svg.attr('viewBox', '0 0 ' + viewBoxSize[0] + ' ' + viewBoxSize[1]);
+        svg.attr('viewBox', '0 0 ' + viewBoxSize + ' ' + viewBoxSize);
     },
 
     inoid: function(d) { 
@@ -967,7 +929,7 @@ CARD_DISPLAY_FIELD_LIST:
     },
 
     _refreshTree: function(viewBoxSize){
-        var width = viewBoxSize[0], height = viewBoxSize[1], radius = Math.min(width, height)/2;
+        var radius = viewBoxSize/2;
         var partition = d3.partition()
             .size([2 * Math.PI, radius]);
 
@@ -1004,8 +966,7 @@ CARD_DISPLAY_FIELD_LIST:
             gApp._nodeTree.sort(function(a,b) { return b.value - a.value; });
         }
 
-        var nodetree = partition(gApp._nodeTree)
-;
+        var nodetree = partition(gApp._nodeTree);
         var tree = d3.select('#tree');
 
         var nodes = tree.selectAll("node")
@@ -1021,15 +982,20 @@ CARD_DISPLAY_FIELD_LIST:
 
                     if (!gApp._dataCheckForItem(d)) {
                         lClass.push( "error--node");    
-                    }else {                    
-                        if (d.data.record.isUserStory() || d.data.record.isDefect()) { 
+                    }else { 
+                        
+                        //NB: Some fields can have a null entry. That needs to be taken care of here!
+                        if (d.data.record.isUserStory()) { 
                             lClass.push(gApp.settings.colourScheme  + (_.find (gApp._storyStates, { 'name' : d.data.record.get('ScheduleState') })).value + '-' + gApp._storyStates.length);
                             lClass.push(d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"");
                         }
+                        else if (d.data.record.isDefect()) { 
+                            lClass.push(gApp.settings.colourScheme  + (_.find (gApp._defectStates, { 'name' : d.data.record.get('ScheduleState') })).value + '-' + gApp._storyStates.length);
+                            lClass.push(d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"");
+                        }
                         else if (d.data.record.isPortfolioItem()) {
-                            //Predecessors take precedence
                             if (d.data.record.get('State')){
-                                lClass.push( gApp.settings.colourScheme + ((d.data.record.get('State').OrderIndex-1) + '-' + gApp.numStates[gApp._getOrdFromModel(d.data.record.get('_type'))]));
+                                lClass.push( gApp.settings.colourScheme + ((d.data.record.get('State').OrderIndex-1) + '-' + gApp._piStates[gApp._getOrdFromModel(d.data.record.get('_type'))]));
                             } else {
                                 lClass.push('error--node');
                             }
@@ -1038,8 +1004,18 @@ CARD_DISPLAY_FIELD_LIST:
                             lClass.push(gApp.settings.colourScheme  + (_.find (gApp._taskStates, { 'name' : d.data.record.get('State') })).value + '-' + gApp._taskStates.length);
                             lClass.push(d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"");
                         }
+                        else if (d.data.record.isTestCase()) {
+                            if (d.data.record.get('LastVerdict')) {
+                                lClass.push(gApp.settings.colourScheme  + (_.find (gApp._tcStates, { 'name' : d.data.record.get('LastVerdict') })).value + '-' + gApp._tcStates.length);
+                            }
+                            else {
+                                lClass.push(gApp.settings.colourScheme  + '0' + '-' + gApp._tcStates.length);
+                            }
+                            lClass.push(d.data.record.get('Blocked')? "blockedOutline": d.data.record.get('Ready')?"readyOutline":"");
+                        }
+                            //Predecessors take precedence
                         if (d.data.record.get('Predecessors') && (d.data.record.get('Predecessors').Count > 0)) {
-                          if (gApp.getSetting('flashDeps')) lClass.push("gotPredecessors");
+                            if (gApp.getSetting('flashDeps')) lClass.push("gotPredecessors");
                             gApp._fetchPredecessors(d);
                         }
                         else if (d.data.record.get('Successors') && (d.data.record.get('Successors').Count > 0)) {
@@ -1066,28 +1042,20 @@ CARD_DISPLAY_FIELD_LIST:
                     return "translate(" + arc.centroid(d) + ") rotate(" + (angle < Math.PI ? angle - Math.PI / 2 : angle + Math.PI / 2) * 180 / Math.PI + ")"; })
                 .text(function(d) { return d.data.Name; });
         }
+        gApp.setLoading(false);
 
-        // Stash the old values for transition.
     },
 
+    // Stash the old values for transition.
     stash: function (d) {
         d.x0s = d.x0;
         d.y0s = d.y0;
         d.x1s = d.x1;
         d.y1s = d.y1;
     },
-
-    arcTween: function (a) {
-        var i = d3.interpolate({x: a.x0, dx: a.dx0}, a);
-        return function(t) {
-            var b = i(t);
-            a.x0 = b.x;
-            a.dx0 = b.dx;
-            return arc(b);
-        };
-    },
     
     _nodeMouseOut: function(node, index,array){
+        // if (node.card && !document.getElementById(node.card.id).contains(event.toElement)) node.card.hide();
         if (node.card) node.card.hide();
     },
 
@@ -1111,15 +1079,18 @@ CARD_DISPLAY_FIELD_LIST:
                     listeners: {
                         show: function(card){
                             //Move card to the centre of the screen
-                            var pos = arc.centroid(node);
-                            var xpos = array[index].getScreenCTM().e + pos[0];
-                            var ypos = array[index].getScreenCTM().f + pos[1];
-                            card.el.setLeftTop( (xpos - gApp.MIN_CARD_WIDTH) < 0 ? xpos + gApp.MIN_CARD_WIDTH + gApp.MIN_COLUMN_WIDTH : xpos - gApp.MIN_CARD_WIDTH, 
-                                (ypos + this.getSize().height)> gApp.getSize().height ? gApp.getSize().height - (this.getSize().height+20) : ypos);  //Tree is rotated
+//                            var pos = arc.centroid(node);
+                            var xpos = event.x;
+                            var ypos = event.y;
+//                            var xpos = array[index].getScreenCTM().e + pos[0];
+//                            var ypos = array[index].getScreenCTM().f + pos[1];
+                            card.el.setLeftTop( (xpos - gApp.MIN_CARD_WIDTH) < 0 ? xpos + gApp.MIN_CARD_WIDTH  : xpos - gApp.MIN_CARD_WIDTH, 
+                                (ypos + (Math.max(this.getSize().height,20))> gApp.getSize().height ? ypos - (this.getSize().height + 20) : ypos+20));  //Tree is rotated
                         }
                     }
                 });
                 node.card = card;
+                //Ext.util.Observable.capture( card, function(event) { console.log(event, arguments);});
             }
             node.card.show();
         }
@@ -1142,7 +1113,7 @@ CARD_DISPLAY_FIELD_LIST:
         if (!(node.data.record.data.ObjectID)) return; //Only exists on real items
         //Get ordinal (or something ) to indicate we are the lowest level, then use "UserStories" instead of "Children"
         if (event.shiftKey) { 
-            gApp._nodePopup(node,index,array); 
+//            gApp._nodePopup(node,index,array); 
         }  else {
             gApp._dataPanel(node,index,array);
         }
@@ -1506,10 +1477,6 @@ CARD_DISPLAY_FIELD_LIST:
     },
         //Routines to manipulate the types
 
-    _getSelectedOrdinal: function() {
-        return gApp.down('#piType').lastSelection[0].get('Ordinal');
-    },
-
      _getTypeList: function(highestOrdinal) {
         var piModels = [];
         _.each(gApp._typeStore.data.items, function(type) {
@@ -1551,7 +1518,10 @@ CARD_DISPLAY_FIELD_LIST:
             parent = record.data.Parent;
         }
         else if (record.isUserStory()) {
-            parent = record.data[parentField];
+            if (record.data.Parent) { parent = record.data.Parent;}
+            else {
+                parent = record.data[parentField];
+            }
         }
         else if (record.isTask()) {
             parent = record.data.WorkProduct;
@@ -1603,7 +1573,7 @@ CARD_DISPLAY_FIELD_LIST:
         nodetree.each( function(d) { 
             d.ChildAttachments.Count = d.value;
         });
-                    console.log("Created Tree: ", nodetree);
+        console.log("Created Tree: ", nodetree);
         return nodetree;
     },
 
@@ -1707,7 +1677,7 @@ CARD_DISPLAY_FIELD_LIST:
             );
             typeStore.load().then({ 
                 success: function(records){
-                    gApp.numStates[modeltype.Ordinal] = records.length;
+                    gApp._piStates[modeltype.Ordinal] = records.length;
                     _.each(records, function(state){
                         var idx = state.get('OrderIndex');
                         colourBox.append("circle")
@@ -1731,11 +1701,6 @@ CARD_DISPLAY_FIELD_LIST:
         
         colours.attr("visibility","hidden");    //Render, but mask it. Use "visible" to show again
     },
-
-    initComponent: function() {
-        this.callParent(arguments);
-        this.addEvents('redrawTree');
-    }
 });
 }());
                 (function () {
@@ -19177,6 +19142,14 @@ Object.defineProperty(exports, '__esModule', { value: true });
         XmlFileExtension: '.xml.txt'
     },
 
+    config: {
+    },
+
+    constructor: function (config) {
+        this.mergeConfig(config);
+        this.callParent(arguments);
+    },
+
     _downloadFiles: function( files ) {
         if ( files.length )
         {
@@ -19262,22 +19235,23 @@ Object.defineProperty(exports, '__esModule', { value: true });
         return cols.length;
     },
 
-    traverseChildren: function(item) {
+    traverseChildren: function(item, fields) {
 
         var me = this;
         var bigString = '';
         if (item.children) {
-            _.each(item.children, function(child) { bigString += me.traverseChildren(child);});
+            _.each(item.children, function(child) { bigString += me.traverseChildren(child, fields);});
         }
 
         //If we come here, we are done going downwards
-        return me.stringifyItem(item) + bigString;
+        return me.stringifyItem(item, fields) + bigString;
     },
 
-    stringifyItem: function(item) {
+    stringifyItem: function(item, fields) {
         var level = 1;
         var smallString = '';
         var parent = item.parent;
+        var me = this;
 
         while (item.depth > level) {
             parent = parent.parent;
@@ -19293,9 +19267,18 @@ Object.defineProperty(exports, '__esModule', { value: true });
             }
             smallString += ',' + this._getFieldTextAndEscape(item.data.record.data.Name);
 
-            //Add more fields in here
-            smallString += ',' + (item.data.Attachments?item.data.Attachments.Count:'');
-            smallString += ',' + item.ChildAttachments.Size;
+            //Add more fields in here before attachments
+
+            _.each(fields, function(field) {
+                smallString += ',' + me._getFieldTextAndEscape(item.data.record.data[field]);    
+            });
+
+            if ( _.contains(this.fields, 'Attachments')){
+
+                smallString += ',' + (item.data.Attachments?item.data.Attachments.Count:0);
+                smallString += ',' + (item.data.Attachments?item.data.Attachments.Size:0);
+                smallString += ',' + item.ChildAttachments.Size;
+            }
             console.log(smallString);
         }
         return smallString + '\n';
@@ -19305,38 +19288,139 @@ Object.defineProperty(exports, '__esModule', { value: true });
         var hdrData    = [];
         var textOut = '';
         var valid = true;
-        var fieldnames = '';
+        var fieldRow = '';
+        var specialFields = ['Attachments'];    //Dealt with individually below
+
+        var printFields = _.filter(this.fields, function(field) {
+            return !(_.contains(specialFields, field));
+        });
 
         var that = this;
         if (!tree) return;  //If user clicks export before the tree is ready.....
 
-        //The 'tree' item is the root item. Get the fieldnames from the types
-//        this.descendantTypes = _.uniq( _.pluck(tree.descendants(), function(item) { return item.data.record.data._type}))
+        //First, let's generate the Column header row
+
+        //The 'tree' item is the root item, but there is inconsistency in the types lower down Feature->Story->Defect or Feature->Story->Task
         for ( i = 0; i < tree.height; i++ ) {
-            fieldnames += 'Tree Level ' + i;
+            fieldRow += 'Ring ' + i + ',';
         }
+
+        fieldRow += 'Name';  //Mandatory in exporter
+        _.each(printFields, function(field) {
+            fieldRow += ',' + field;
+        });
         
-        fieldnames += ",Description" + ", Attachments Count, Attachments Total" + "\n";
+        if ( _.contains(this.fields, 'Attachments')){
+            fieldRow += ",Attachments Count, Attachments Size, Attachments Total" ;
+        }
+        fieldRow += "\n";
+
         //Now we can start traversing the children
-        textOut = that.traverseChildren(tree) + textOut;
+        textOut = that.traverseChildren(tree, printFields) + textOut;
 
         if (tree.ChildAttachments.Count > 0) {
             for ( i = 0; i < tree.height; i++){
                 textOut += ',';
             }
             textOut += "Total Attachments Size";
+            for ( i = 0; i < printFields.length; i++) {
+                textOut+=',';
+            }
+
             textOut += "," + tree.ChildAttachments.Count + ',' + tree.ChildAttachments.Size + '\n';
         }
         if (textOut.length > 0)
-//        return fieldnames + textOut;
-        return textOut;
+        return fieldRow + textOut;
+//        return textOut;
         else
             return null;
     }
 });
+                function worker() {
+
+    var id = 0;
+    var currentState = 'Initiate';
+    var timeout = 120000;
+    var fetchFields = 'true';
+
+
+    onmessage = function(ev) {
+
+        switch(ev.data.command){
+            case 'wake' : {
+                defaultReply();
+                break;
+            } 
+            case 'initialise': {
+                this.id = ev.data.id;
+                currentState = 'Asleep';
+                fetchFields = encodeURIComponent(ev.data.fields.toString());
+                defaultReply();
+                break;
+            } 
+            case 'readchildren' : {
+                _actionFetchChildren(ev.data);
+                break;
+            }
+            default: {
+                console.log('Unknown message received by thread: ', this.id);
+                break;
+            }
+        }
+    };
+
+    function _actionFetchChildren(msg) {
+        if (
+            ((msg.hasChildren !== null) && _getFromURL(msg.hasChildren)) +
+            ((msg.hasStories !== null) && _getFromURL(msg.hasStories)) +
+            ((msg.hasDefects !== null) && _getFromURL(msg.hasDefects)) +
+            ((msg.hasTasks !== null) && _getFromURL(msg.hasTasks)) +
+            ((msg.hasTestCases !== null) && _getFromURL(msg.hasTestCases)) ) {
+                return;
+
+        } else {
+            defaultReply();
+        }
+    }
+
+    function _getFromURL(url) {
+        var getReq = new XMLHttpRequest();
+        getReq.onreadystatechange = _successHandler;
+        getReq.withCredentials = true;
+        currentState = 'Reading';
+        getReq.open("GET", url + '?fetch=' + fetchFields, true);
+        getReq.send(null);
+        return true;
+    }
+
+    function _successHandler(event) {
+        if ((this.readyState === 4) && (this.status === 200)){
+            _dataReply(JSON.parse(this.responseText).QueryResult.Results);
+            currentState = 'Asleep';
+        }
+    }
+
+    function _dataReply(data) {
+        postMessage( {
+            response: 'Alive',
+            reply: 'Data',
+            records: data,
+            id: this.id
+        });
+    }
+
+    function defaultReply() {
+        postMessage({
+            response: 'Alive',
+            reply: this.currentState,
+            id: this.id
+        });
+    }
+}
+
 
             Rally.launchApp('Rally.app.RadialDensity.app', {
-                name:"Density Map",
+                name:"Radial Density Map",
                 parentRepos:"",
                 version:"1.0.0"
             });

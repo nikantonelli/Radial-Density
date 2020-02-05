@@ -3,7 +3,9 @@ Portfolio Item Tree
 
 ## Overview
 
-Another take on the Portfolio Items page in Rally. This time using a radial chart style visualisation.
+Another take on the Portfolio Items page in Rally. This time using a radial chart style visualisation. 
+
+If you have a huge hierarchy, this app will moderate the number of connections by using worker threads, one per artefact fetch. You can specify how many threads to have active at one time.
 
 This app will allow you to select a type, then an item in your scope with that type and then it will create a tree of the child artifacts.
 

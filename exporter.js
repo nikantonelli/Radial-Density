@@ -7,6 +7,14 @@ Ext.define("TreeExporter", {
         XmlFileExtension: '.xml.txt'
     },
 
+    config: {
+    },
+
+    constructor: function (config) {
+        this.mergeConfig(config);
+        this.callParent(arguments);
+    },
+
     _downloadFiles: function( files ) {
         if ( files.length )
         {
@@ -92,22 +100,23 @@ Ext.define("TreeExporter", {
         return cols.length;
     },
 
-    traverseChildren: function(item) {
+    traverseChildren: function(item, fields) {
 
         var me = this;
         var bigString = '';
         if (item.children) {
-            _.each(item.children, function(child) { bigString += me.traverseChildren(child);});
+            _.each(item.children, function(child) { bigString += me.traverseChildren(child, fields);});
         }
 
         //If we come here, we are done going downwards
-        return me.stringifyItem(item) + bigString;
+        return me.stringifyItem(item, fields) + bigString;
     },
 
-    stringifyItem: function(item) {
+    stringifyItem: function(item, fields) {
         var level = 1;
         var smallString = '';
         var parent = item.parent;
+        var me = this;
 
         while (item.depth > level) {
             parent = parent.parent;
@@ -123,9 +132,18 @@ Ext.define("TreeExporter", {
             }
             smallString += ',' + this._getFieldTextAndEscape(item.data.record.data.Name);
 
-            //Add more fields in here
-            smallString += ',' + (item.data.Attachments?item.data.Attachments.Count:'');
-            smallString += ',' + item.ChildAttachments.Size;
+            //Add more fields in here before attachments
+
+            _.each(fields, function(field) {
+                smallString += ',' + me._getFieldTextAndEscape(item.data.record.data[field]);    
+            });
+
+            if ( _.contains(this.fields, 'Attachments')){
+
+                smallString += ',' + (item.data.Attachments?item.data.Attachments.Count:0);
+                smallString += ',' + (item.data.Attachments?item.data.Attachments.Size:0);
+                smallString += ',' + item.ChildAttachments.Size;
+            }
             console.log(smallString);
         }
         return smallString + '\n';
@@ -135,31 +153,50 @@ Ext.define("TreeExporter", {
         var hdrData    = [];
         var textOut = '';
         var valid = true;
-        var fieldnames = '';
+        var fieldRow = '';
+        var specialFields = ['Attachments'];    //Dealt with individually below
+
+        var printFields = _.filter(this.fields, function(field) {
+            return !(_.contains(specialFields, field));
+        });
 
         var that = this;
         if (!tree) return;  //If user clicks export before the tree is ready.....
 
-        //The 'tree' item is the root item. Get the fieldnames from the types
-//        this.descendantTypes = _.uniq( _.pluck(tree.descendants(), function(item) { return item.data.record.data._type}))
+        //First, let's generate the Column header row
+
+        //The 'tree' item is the root item, but there is inconsistency in the types lower down Feature->Story->Defect or Feature->Story->Task
         for ( i = 0; i < tree.height; i++ ) {
-            fieldnames += 'Tree Level ' + i;
+            fieldRow += 'Ring ' + i + ',';
         }
+
+        fieldRow += 'Name';  //Mandatory in exporter
+        _.each(printFields, function(field) {
+            fieldRow += ',' + field;
+        });
         
-        fieldnames += ",Description" + ", Attachments Count, Attachments Total" + "\n";
+        if ( _.contains(this.fields, 'Attachments')){
+            fieldRow += ",Attachments Count, Attachments Size, Attachments Total" ;
+        }
+        fieldRow += "\n";
+
         //Now we can start traversing the children
-        textOut = that.traverseChildren(tree) + textOut;
+        textOut = that.traverseChildren(tree, printFields) + textOut;
 
         if (tree.ChildAttachments.Count > 0) {
             for ( i = 0; i < tree.height; i++){
                 textOut += ',';
             }
             textOut += "Total Attachments Size";
+            for ( i = 0; i < printFields.length; i++) {
+                textOut+=',';
+            }
+
             textOut += "," + tree.ChildAttachments.Count + ',' + tree.ChildAttachments.Size + '\n';
         }
         if (textOut.length > 0)
-//        return fieldnames + textOut;
-        return textOut;
+        return fieldRow + textOut;
+//        return textOut;
         else
             return null;
     }
